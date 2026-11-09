@@ -1,0 +1,106 @@
+import type { Compensation, Overtime, User } from "@/types";
+
+/** Datos ficticios de demostración. Reemplazar por Firestore más adelante. */
+export const demoUsers: User[] = [
+  { id: "u1", name: "Ana Torres", role: "trabajador", area: "Almacén", active: true },
+  { id: "u2", name: "Luis Ramírez", role: "trabajador", area: "Almacén", active: true },
+  { id: "u3", name: "María Quispe", role: "trabajador", area: "Reportes", active: true },
+  { id: "u4", name: "Carlos Mendoza", role: "trabajador", area: "Inventario", active: true },
+  { id: "u5", name: "Sofía Vargas", role: "trabajador", area: "Inventario", active: true },
+  { id: "j1", name: "Roberto Salazar", role: "jefe", area: "Operaciones", active: true },
+  { id: "a1", name: "Admin Demo", role: "admin", area: "Sistemas", active: true },
+];
+
+const ot = (
+  n: number,
+  workerId: string,
+  date: string,
+  start: string,
+  end: string,
+  minutes: number,
+  reason: string,
+): Overtime => ({
+  id: `ot${n}`,
+  code: `HE-${String(n).padStart(6, "0")}`,
+  workerId,
+  date,
+  start,
+  end,
+  minutes,
+  reason,
+  status: "activo",
+  createdAt: `${date}T${end}:00`,
+});
+
+export const demoOvertime: Overtime[] = [
+  ot(1, "u1", "2026-10-05", "18:00", "20:00", 120, "Inventario general"),
+  ot(2, "u1", "2026-10-12", "18:00", "20:00", 120, "Validación de stock"),
+  ot(3, "u1", "2026-10-20", "18:00", "20:00", 120, "Cierre de reportes"),
+  ot(4, "u2", "2026-10-08", "22:00", "01:30", 210, "Inventario general"),
+  ot(5, "u3", "2026-10-30", "17:30", "20:30", 180, "Cierre de reportes"),
+  ot(6, "u3", "2026-11-02", "18:00", "19:30", 90, "Cierre de reportes"),
+  ot(7, "u4", "2026-11-03", "18:00", "21:00", 180, "Validación de stock"),
+  ot(8, "u5", "2026-11-04", "07:00", "08:00", 60, "Recepción de mercadería"),
+  ot(9, "u2", "2026-11-05", "18:00", "20:15", 135, "Validación de stock"),
+];
+
+export const demoCompensations: Compensation[] = [
+  {
+    id: "cp1",
+    code: "CP-000001",
+    workerId: "u1",
+    date: "2026-11-10",
+    start: "08:00",
+    end: "11:00",
+    minutes: 180,
+    reason: "Trámite personal",
+    status: "pendiente",
+    createdAt: "2026-11-05T09:00:00",
+    allocations: [
+      { overtimeId: "ot1", minutes: 120 },
+      { overtimeId: "ot2", minutes: 60 },
+    ],
+  },
+  {
+    id: "cp2",
+    code: "CP-000002",
+    workerId: "u2",
+    date: "2026-10-24",
+    start: "14:00",
+    end: "16:00",
+    minutes: 120,
+    reason: "Cita médica",
+    status: "aprobada",
+    createdAt: "2026-10-15T10:00:00",
+    reviewedAt: "2026-10-16T08:00:00",
+    allocations: [{ overtimeId: "ot4", minutes: 120 }],
+  },
+  {
+    id: "cp3",
+    code: "CP-000003",
+    workerId: "u3",
+    date: "2026-11-14",
+    start: "08:00",
+    end: "10:00",
+    minutes: 120,
+    reason: "Asunto familiar",
+    status: "rechazada",
+    reviewNote: "Cierre de mes, se requiere personal.",
+    createdAt: "2026-11-03T12:00:00",
+    reviewedAt: "2026-11-04T09:00:00",
+    allocations: [{ overtimeId: "ot5", minutes: 120 }],
+  },
+  {
+    id: "cp4",
+    code: "CP-000004",
+    workerId: "u4",
+    date: "2026-11-18",
+    start: "15:00",
+    end: "17:00",
+    minutes: 120,
+    reason: "Descanso",
+    status: "pendiente",
+    createdAt: "2026-11-06T11:00:00",
+    allocations: [{ overtimeId: "ot7", minutes: 120 }],
+  },
+];
