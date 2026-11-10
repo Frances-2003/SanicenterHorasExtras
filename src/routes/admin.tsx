@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app/AppShell";
 import { Switch } from "@/components/ui/switch";
-import { toggleUserActive, useCurrentUser, useStore } from "@/services/store";
+import { useStore } from "@/services/store";
 import { ROLE_LABELS } from "@/services/auth";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -22,7 +21,6 @@ export const Route = createFileRoute("/admin")({
 
 function Admin() {
   const { users } = useStore();
-  const me = useCurrentUser();
   return (
     <AppShell
       title="Administración"
@@ -60,11 +58,7 @@ function Admin() {
                 <td className="td text-right">
                   <Switch
                     checked={u.active}
-                    disabled={u.id === me?.id}
-                    onCheckedChange={() => {
-                      toggleUserActive(u.id);
-                      toast.success(`${u.name} ${u.active ? "desactivado" : "activado"}`);
-                    }}
+                    disabled
                     aria-label={`Activar o desactivar ${u.name}`}
                   />
                 </td>

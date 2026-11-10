@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "server/**/*.ts",
+    "netlify/**/*.ts",
+    "scripts/**/*.ts",
+    "e2e/**/*.ts",
+    "playwright.config.ts",
+    "security/**/*.ts",
+    "src/services/workflow.ts",
+    "src/services/ledger.ts",
+    "src/types/index.ts",
+    "src/lib/time.ts"
+  ],
+  "compilerOptions": { "types": ["node", "vitest/globals", "vite/client"] }
+}

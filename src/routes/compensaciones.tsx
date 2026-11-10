@@ -7,6 +7,8 @@ import { Pager, Stat, StatusBadge, paginate } from "@/components/app/ui";
 import { nextCompCode, requestCompensation, useCurrentUser, useStore } from "@/services/store";
 import { availableFor, balanceOf, usedMinutes } from "@/services/ledger";
 import { diffMinutes, fmtDate, fmtMin } from "@/lib/time";
+import { WorkflowActions } from "@/components/app/WorkflowActions";
+import { overlaps } from "@/services/workflow";
 
 export const Route = createFileRoute("/compensaciones")({
   head: () => ({
@@ -28,18 +30,18 @@ export const Route = createFileRoute("/compensaciones")({
 
 function Compensaciones() {
   const user = useCurrentUser();
-  const { overtime, comps } = useStore();
+  const { overtime, comps, calendar } = useStore();
   const [form, setForm] = useState({ date: "", start: "08:00", end: "10:00", reason: "" });
   const [alloc, setAlloc] = useState<Record<string, { h: number; m: number }>>({});
   const [page, setPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const total = diffMinutes(form.start, form.end);
-  const crossesMidnight = form.start && form.end && form.end < form.start;
+  const crossesMidnight = form.start && form.end && form.end <= form.start;
 
   const sources = useMemo(
     () =>
       overtime
-        .filter((o) => o.workerId === user?.id && o.status === "activo")
+        .filter((o) => o.workerId === user?.id && o.status === "aprobada")
         .map((o) => ({
           o,
           avail: availableFor(o, comps),
@@ -93,7 +95,7 @@ function Compensaciones() {
       return { ...p, [id]: cur };
     });
 
-  const submit = () => {
+  const submit = async () => {
     if (isSubmitting) return;
 
     if (!form.date) {
@@ -122,7 +124,7 @@ function Compensaciones() {
 
     setIsSubmitting(true);
     try {
-      const r = requestCompensation({
+      const r = await requestCompensation({
         workerId: user.id,
         ...form,
         allocations,
@@ -168,6 +170,14 @@ function Compensaciones() {
 
       <div className="card mb-6 p-5">
         <h2 className="mb-4 font-semibold">Nueva solicitud de compensación</h2>
+        {calendar
+          .filter((c) => c.workerId !== user.id && overlaps(c, form))
+          .map((c) => (
+            <p key={c.id} className="mb-2 rounded-lg bg-secondary p-3 text-sm">
+              {c.workerName} tiene un descanso aprobado el {fmtDate(c.date)}, de {c.start} a {c.end}
+              .
+            </p>
+          ))}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <label className="field-label">Código de compensación</label>
@@ -349,6 +359,7 @@ function Compensaciones() {
                   <th className="th">Horas extras de origen</th>
                   <th className="th">Motivo</th>
                   <th className="th">Estado</th>
+                  <th className="th">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -378,6 +389,15 @@ function Compensaciones() {
                     </td>
                     <td className="td">
                       <StatusBadge status={c.status} />
+                      {c.cancellationNote && (
+                        <p className="text-xs">Solicitud de anulación: {c.cancellationNote}</p>
+                      )}
+                      {c.cancellationReviewNote && (
+                        <p className="text-xs">Revisión: {c.cancellationReviewNote}</p>
+                      )}
+                    </td>
+                    <td className="td">
+                      <WorkflowActions record={c} manager={false} />
                     </td>
                   </tr>
                 ))}

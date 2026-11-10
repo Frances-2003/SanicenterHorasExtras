@@ -1,4 +1,4 @@
-import type { Allocation, Balance, Compensation, MonthlyMovement, Overtime } from "@/types";
+import type { Allocation, Balance, Compensation, MonthlyMovement, Overtime } from "../types";
 
 /**
  * Pure balance & ledger rules — independent of storage so Firestore / Firebase
@@ -15,7 +15,12 @@ import type { Allocation, Balance, Compensation, MonthlyMovement, Overtime } fro
 export function usedMinutes(
   overtimeId: string,
   comps: Compensation[],
-  statuses: Compensation["status"][] = ["pendiente", "aprobada"],
+  statuses: Compensation["status"][] = [
+    "pendiente",
+    "aprobada",
+    "cancelacion_pendiente",
+    "efectuada",
+  ],
 ): number {
   return comps
     .filter((c) => statuses.includes(c.status))
@@ -29,7 +34,7 @@ export function usedMinutes(
 
 /** Remaining minutes available in a specific overtime record. */
 export function availableFor(o: Overtime, comps: Compensation[]): number {
-  if (o.status === "anulado") return 0;
+  if (o.status !== "aprobada") return 0;
   return Math.max(0, o.minutes - usedMinutes(o.id, comps));
 }
 
@@ -44,11 +49,13 @@ export function availableFor(o: Overtime, comps: Compensation[]): number {
  */
 export function balanceOf(workerId: string, ots: Overtime[], comps: Compensation[]): Balance {
   const accumulated = ots
-    .filter((o) => o.workerId === workerId && o.status === "activo")
+    .filter((o) => o.workerId === workerId && o.status === "aprobada")
     .reduce((s, o) => s + o.minutes, 0);
 
   const mine = comps.filter((c) => c.workerId === workerId);
-  const approved = mine.filter((c) => c.status === "aprobada").reduce((s, c) => s + c.minutes, 0);
+  const approved = mine
+    .filter((c) => ["aprobada", "cancelacion_pendiente", "efectuada"].includes(c.status))
+    .reduce((s, c) => s + c.minutes, 0);
 
   const reserved = mine.filter((c) => c.status === "pendiente").reduce((s, c) => s + c.minutes, 0);
 
@@ -70,11 +77,13 @@ export function monthlyMovementsOf(
   const inMonth = (d: string) => d.startsWith(month);
 
   const accumulated = ots
-    .filter((o) => o.workerId === workerId && o.status === "activo" && inMonth(o.date))
+    .filter((o) => o.workerId === workerId && o.status === "aprobada" && inMonth(o.date))
     .reduce((s, o) => s + o.minutes, 0);
 
   const mine = comps.filter((c) => c.workerId === workerId && inMonth(c.date));
-  const approved = mine.filter((c) => c.status === "aprobada").reduce((s, c) => s + c.minutes, 0);
+  const approved = mine
+    .filter((c) => ["aprobada", "cancelacion_pendiente", "efectuada"].includes(c.status))
+    .reduce((s, c) => s + c.minutes, 0);
 
   const reserved = mine.filter((c) => c.status === "pendiente").reduce((s, c) => s + c.minutes, 0);
 
@@ -97,8 +106,12 @@ export function validateAllocations(
   ots: Overtime[],
   comps: Compensation[],
 ): string | null {
-  if (total <= 0) return "Indica un horario de descanso válido con duración mayor a 0 minutos.";
-  const validAllocs = allocs.filter((a) => a.minutes > 0);
+  if (!Number.isSafeInteger(total) || total <= 0)
+    return "Indica un horario de descanso válido con duración mayor a 0 minutos.";
+  if (allocs.some((a) => !Number.isInteger(a.minutes) || a.minutes <= 0)) {
+    return "Los minutos asignados deben ser números enteros mayores a 0.";
+  }
+  const validAllocs = allocs;
   if (!validAllocs.length) return "Selecciona al menos un registro de horas extras de origen.";
 
   // Group duplicate allocations by overtimeId
@@ -114,7 +127,7 @@ export function validateAllocations(
     const o = ots.find((x) => x.id === overtimeId);
     if (!o) return "Registro de origen no encontrado.";
     if (o.workerId !== workerId) return `El registro ${o.code} no pertenece al trabajador.`;
-    if (o.status !== "activo") return `El registro ${o.code} no está activo (fue anulado).`;
+    if (o.status !== "aprobada") return `El registro ${o.code} aún no está aprobado o fue anulado.`;
 
     const available = availableFor(o, comps);
     if (allocatedMins > available) {
@@ -134,5 +147,5 @@ export function validateAllocations(
  * Overtime record can be voided only if active and has 0 minutes in pending or approved compensations.
  */
 export function canVoid(o: Overtime, comps: Compensation[]): boolean {
-  return o.status === "activo" && usedMinutes(o.id, comps) === 0;
+  return o.status === "aprobada" && usedMinutes(o.id, comps) === 0;
 }

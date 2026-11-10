@@ -1,10 +1,9 @@
 /**
  * Duration in whole minutes between HH:mm times.
- * Crosses midnight when end < start (e.g. 22:00 to 02:00 -> 240m).
- * Start equal to end (e.g. 18:00 to 18:00) returns 0 minutes (not 24h).
+ * Crosses midnight when end <= start, including a full day for equal times.
  */
 export function diffMinutes(start: string, end: string): number {
-  if (!start || !end) return 0;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end)) return 0;
   const partsS = start.split(":");
   const partsE = end.split(":");
   if (partsS.length !== 2 || partsE.length !== 2) return 0;
@@ -18,11 +17,8 @@ export function diffMinutes(start: string, end: string): number {
   const startTotal = sh * 60 + sm;
   const endTotal = eh * 60 + em;
 
-  if (startTotal === endTotal) {
-    return 0;
-  }
   let d = endTotal - startTotal;
-  if (d < 0) {
+  if (d <= 0) {
     // Crosses midnight
     d += 1440;
   }

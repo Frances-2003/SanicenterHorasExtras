@@ -1,19 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Ban, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell, Empty } from "@/components/app/AppShell";
 import { Pager, StatusBadge, paginate } from "@/components/app/ui";
-import { ReasonDialog } from "@/components/app/ReasonDialog";
-import {
-  addOvertime,
-  nextOvertimeCode,
-  useCurrentUser,
-  useStore,
-  voidOvertime,
-} from "@/services/store";
-import { availableFor, canVoid } from "@/services/ledger";
+import { addOvertimeFirestore, useCurrentUser, useStore } from "@/services/store";
+import { availableFor } from "@/services/ledger";
 import { diffMinutes, fmtDate, fmtMin } from "@/lib/time";
+import { WorkflowActions } from "@/components/app/WorkflowActions";
 
 export const Route = createFileRoute("/horas")({
   head: () => ({
@@ -48,10 +42,9 @@ function Horas() {
   const [form, setForm] = useState({ date: "", start: "18:00", end: "20:00", reason: "" });
   const [f, setF] = useState({ date: "", month: "", code: "", worker: "" });
   const [page, setPage] = useState(1);
-  const [voiding, setVoiding] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const minutes = diffMinutes(form.start, form.end);
-  const crossesMidnight = form.start && form.end && form.end < form.start;
+  const crossesMidnight = form.start && form.end && form.end <= form.start;
 
   const rows = useMemo(
     () =>
@@ -69,7 +62,7 @@ function Horas() {
 
   if (!user) return <AppShell title="">{null}</AppShell>;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
@@ -88,12 +81,12 @@ function Horas() {
 
     setIsSubmitting(true);
     try {
-      const r = addOvertime({ workerId: user.id, ...form });
+      const r = await addOvertimeFirestore({ workerId: user.id, ...form });
       if (!r.ok) {
         toast.error(r.error);
         return;
       }
-      toast.success(`Horas extras registradas correctamente: ${fmtMin(minutes)}`);
+      toast.success(`Solicitud enviada para aprobación: ${fmtMin(minutes)}`);
       setForm({ ...form, date: "", reason: "" });
     } finally {
       setIsSubmitting(false);
@@ -107,15 +100,15 @@ function Horas() {
       title={isWorker ? "Mis horas extras" : "Horas extras del equipo"}
       subtitle={
         isWorker
-          ? "Las horas se acumulan directamente al registrarse (no requieren aprobación previa)."
-          : "Consulta y anula registros de horas extras cuando corresponda."
+          ? "Las solicitudes quedan pendientes hasta que el jefe las apruebe."
+          : "Consulta las solicitudes de horas extras del equipo."
       }
     >
       {isWorker && (
         <form onSubmit={submit} className="card mb-6 grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <label className="field-label">Código</label>
-            <input className="field bg-muted font-mono" value={nextOvertimeCode()} readOnly />
+            <input className="field bg-muted font-mono" value="Se asigna al guardar" readOnly />
           </div>
           <div>
             <label className="field-label">Trabajador</label>
@@ -183,7 +176,7 @@ function Horas() {
               className="btn-primary w-full disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
-              {isSubmitting ? "Registrando..." : "Registrar"}
+              {isSubmitting ? "Enviando..." : "Solicitar aprobación"}
             </button>
           </div>
         </form>
@@ -280,14 +273,14 @@ function Horas() {
                   <th className="th">Saldo restante</th>
                   <th className="th">Motivo</th>
                   <th className="th">Estado</th>
-                  {!isWorker && <th className="th text-right">Acciones</th>}
+                  {!isWorker && <th className="th">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
                 {paginate(rows, page, 10).map((o) => (
                   <tr
                     key={o.id}
-                    className={o.status === "anulado" ? "text-muted-foreground opacity-60" : ""}
+                    className={o.status === "anulada" ? "text-muted-foreground opacity-60" : ""}
                   >
                     <td className="td font-mono text-xs">{o.code}</td>
                     {!isWorker && <td className="td font-medium">{nameOf(o.workerId)}</td>}
@@ -309,24 +302,13 @@ function Horas() {
                     </td>
                     <td className="td">
                       <StatusBadge status={o.status} />
+                      {o.reviewNote && (
+                        <div className="text-xs text-muted-foreground">{o.reviewNote}</div>
+                      )}
                     </td>
                     {!isWorker && (
-                      <td className="td text-right">
-                        {o.status === "activo" && (
-                          <button
-                            className="btn-ghost px-2 py-1 text-xs text-destructive hover:bg-destructive-soft"
-                            disabled={!canVoid(o, comps)}
-                            title={
-                              canVoid(o, comps)
-                                ? "Anular registro"
-                                : "No se puede anular: horas en uso por una compensación"
-                            }
-                            onClick={() => setVoiding(o.id)}
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                            Anular
-                          </button>
-                        )}
+                      <td className="td">
+                        <WorkflowActions record={o} manager overtime />
                       </td>
                     )}
                   </tr>
@@ -337,25 +319,6 @@ function Horas() {
         )}
         <Pager page={page} total={rows.length} size={10} onChange={setPage} />
       </div>
-
-      <ReasonDialog
-        open={!!voiding}
-        danger
-        requireReason
-        title="Anular registro de horas extras"
-        description="El registro se conservará en el historial como anulado y sus horas se descontarán del saldo. Solo permitido si no está en uso."
-        confirmLabel="Confirmar anulación"
-        onClose={() => setVoiding(null)}
-        onConfirm={(reason) => {
-          const r = voidOvertime(voiding!, reason);
-          if (r.ok) {
-            toast.success("Registro de horas extras anulado correctamente.");
-          } else {
-            toast.error(r.error);
-          }
-          setVoiding(null);
-        }}
-      />
     </AppShell>
   );
 }

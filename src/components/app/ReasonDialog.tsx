@@ -17,6 +17,7 @@ export function ReasonDialog({
   requireReason,
   onClose,
   onConfirm,
+  busy = false,
 }: {
   open: boolean;
   title: string;
@@ -25,14 +26,15 @@ export function ReasonDialog({
   danger?: boolean;
   requireReason?: boolean;
   onClose: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string) => void | Promise<void>;
+  busy?: boolean;
 }) {
   const [reason, setReason] = useState("");
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) {
+        if (!o && !busy) {
           setReason("");
           onClose();
         }
@@ -54,6 +56,7 @@ export function ReasonDialog({
         <DialogFooter>
           <button
             className="btn-ghost"
+            disabled={busy}
             onClick={() => {
               setReason("");
               onClose();
@@ -63,10 +66,9 @@ export function ReasonDialog({
           </button>
           <button
             className={danger ? "btn-danger" : "btn-primary"}
-            disabled={requireReason && !reason.trim()}
-            onClick={() => {
-              onConfirm(reason);
-              setReason("");
+            disabled={busy || (requireReason && !reason.trim())}
+            onClick={async () => {
+              await onConfirm(reason);
             }}
           >
             {confirmLabel}

@@ -19,6 +19,21 @@ dist-ssr
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+firebase-debug.log
+firestore-debug.log
+*-service-account.json
+service-account*.json
+playwright-report/
+test-results/
+.emulator-data/
+AUDITORIA_*.local.json
+audit-*.local.json
+.netlify/
+backups/
+*.scbackup
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*

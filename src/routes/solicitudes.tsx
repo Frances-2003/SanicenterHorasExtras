@@ -1,11 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AppShell, Empty } from "@/components/app/AppShell";
 import { Pager, StatusBadge, paginate } from "@/components/app/ui";
-import { ReasonDialog } from "@/components/app/ReasonDialog";
-import { reviewCompensation, useStore } from "@/services/store";
+import { WorkflowActions } from "@/components/app/WorkflowActions";
+import { useStore } from "@/services/store";
 import { fmtDate, fmtMin } from "@/lib/time";
 import type { CompStatus } from "@/types";
 
@@ -31,7 +29,6 @@ function Solicitudes() {
   const { comps, users, overtime } = useStore();
   const [tab, setTab] = useState<CompStatus | "todas">("pendiente");
   const [page, setPage] = useState(1);
-  const [action, setAction] = useState<{ id: string; approve: boolean } | null>(null);
 
   const rows = useMemo(
     () =>
@@ -47,7 +44,6 @@ function Solicitudes() {
 
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? "—";
   const ot = (id: string) => overtime.find((o) => o.id === id);
-  const target = comps.find((c) => c.id === action?.id);
   const count = (s: CompStatus) => comps.filter((c) => c.status === s).length;
 
   return (
@@ -57,7 +53,17 @@ function Solicitudes() {
       roles={["jefe", "admin"]}
     >
       <div className="mb-4 flex flex-wrap gap-1">
-        {(["pendiente", "aprobada", "rechazada", "todas"] as const).map((t) => (
+        {(
+          [
+            "pendiente",
+            "aprobada",
+            "rechazada",
+            "cancelacion_pendiente",
+            "anulada",
+            "efectuada",
+            "todas",
+          ] as const
+        ).map((t) => (
           <button
             key={t}
             onClick={() => {
@@ -76,7 +82,9 @@ function Solicitudes() {
                 ? "Pendientes"
                 : t === "aprobada"
                   ? "Aprobadas"
-                  : "Rechazadas"}
+                  : t === "cancelacion_pendiente"
+                    ? "Anulaciones pendientes"
+                    : t.replaceAll("_", " ")}
             {t !== "todas" && (
               <span
                 className={`ml-1.5 rounded-full px-1.5 py-0.2 text-xs ${tab === t ? "bg-primary text-primary-foreground" : "bg-muted"}`}
@@ -122,6 +130,15 @@ function Solicitudes() {
                     <td className="td font-medium">{fmtMin(c.minutes)}</td>
                     <td className="td">
                       {c.reason || "—"}
+                      {c.cancellationNote && (
+                        <p className="text-xs">Solicitud de anulación: {c.cancellationNote}</p>
+                      )}
+                      {c.cancellationReviewNote && (
+                        <p className="text-xs">Revisión: {c.cancellationReviewNote}</p>
+                      )}
+                      {c.confirmationNote && (
+                        <p className="text-xs">Descanso confirmado: {c.confirmationNote}</p>
+                      )}
                       {c.reviewNote && (
                         <div className="mt-0.5 text-xs text-muted-foreground">
                           Obs.: {c.reviewNote}
@@ -146,30 +163,7 @@ function Solicitudes() {
                       <StatusBadge status={c.status} />
                     </td>
                     <td className="td text-right">
-                      {c.status === "pendiente" ? (
-                        <div className="flex justify-end gap-1.5">
-                          <button
-                            type="button"
-                            className="btn-primary px-2.5 py-1 text-xs"
-                            onClick={() => setAction({ id: c.id, approve: true })}
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                            Aprobar
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-ghost px-2.5 py-1 text-xs text-destructive hover:bg-destructive-soft"
-                            onClick={() => setAction({ id: c.id, approve: false })}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                            Rechazar
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {c.status === "aprobada" ? "Aprobada" : "Rechazada"}
-                        </span>
-                      )}
+                      <WorkflowActions record={c} manager />
                     </td>
                   </tr>
                 ))}
@@ -179,37 +173,6 @@ function Solicitudes() {
         )}
         <Pager page={page} total={rows.length} size={10} onChange={setPage} />
       </div>
-
-      <ReasonDialog
-        open={!!action}
-        danger={action ? !action.approve : false}
-        requireReason={action ? !action.approve : false}
-        title={
-          action?.approve
-            ? `Aprobar solicitud ${target?.code}`
-            : `Rechazar solicitud ${target?.code}`
-        }
-        description={
-          action?.approve
-            ? `Se confirmará la compensación de ${fmtMin(target?.minutes ?? 0)} para ${nameOf(target?.workerId ?? "")}. Las horas reservadas pasarán a compensadas definitivamente.`
-            : "Al rechazar la solicitud, las horas reservadas volverán a estar disponibles de inmediato en el saldo del trabajador."
-        }
-        confirmLabel={action?.approve ? "Confirmar aprobación" : "Confirmar rechazo"}
-        onClose={() => setAction(null)}
-        onConfirm={(note) => {
-          const r = reviewCompensation(action!.id, action!.approve, note);
-          if (r.ok) {
-            toast.success(
-              action!.approve
-                ? "Solicitud aprobada correctamente."
-                : "Solicitud rechazada correctamente.",
-            );
-          } else {
-            toast.error(r.error);
-          }
-          setAction(null);
-        }}
-      />
     </AppShell>
   );
 }

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CalendarCheck, CheckCircle2, History, Hourglass, TrendingUp, Wallet } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { overlaps } from "@/services/workflow";
 import { AppShell, Empty } from "@/components/app/AppShell";
 import { Stat, StatusBadge } from "@/components/app/ui";
 import { useCurrentUser, useStore } from "@/services/store";
@@ -30,7 +31,7 @@ const DOW = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"];
 
 function Resumen() {
   const user = useCurrentUser();
-  const { users, overtime, comps } = useStore();
+  const { users, overtime, comps, calendar } = useStore();
   const [month, setMonth] = useState("2026-11");
   const [worker, setWorker] = useState("");
   const [day, setDay] = useState<string | null>(null);
@@ -39,7 +40,6 @@ function Resumen() {
   const workers = users.filter(
     (u) => u.role === "trabajador" && (isWorker ? u.id === user?.id : !worker || u.id === worker),
   );
-  const ids = new Set(workers.map((w) => w.id));
 
   // Separate monthly movements from historical balance
   const rows = workers.map((w) => ({
@@ -67,9 +67,11 @@ function Resumen() {
     { acc: 0, ap: 0, res: 0, av: 0 },
   );
 
-  const monthComps = useMemo(
-    () => comps.filter((c) => ids.has(c.workerId) && c.date.startsWith(month)),
-    [comps, month, worker, user], // eslint-disable-line react-hooks/exhaustive-deps
+  const onDay = (c: { date: string; start: string; end: string }, date: string) =>
+    overlaps(c, { date, start: "00:00", end: "00:00" });
+  const monthComps = calendar.filter(
+    (c) =>
+      (c.date.startsWith(month) || onDay(c, `${month}-01`)) && (!worker || c.workerId === worker),
   );
 
   const [y = 2026, m = 1] = month.split("-").map(Number);
@@ -79,12 +81,13 @@ function Resumen() {
     ...Array(first).fill(null),
     ...Array.from({ length: days }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`),
   ];
-  const dayComps = day ? monthComps.filter((c) => c.date === day) : [];
-  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? "—";
+  const dayComps = day ? monthComps.filter((c) => onDay(c, day)) : [];
   const dotColor = {
     pendiente: "bg-warning",
     aprobada: "bg-primary",
     rechazada: "bg-destructive",
+    cancelacion_pendiente: "bg-warning",
+    efectuada: "bg-primary",
   } as const;
 
   return (
@@ -242,7 +245,7 @@ function Resumen() {
             ))}
             {cells.map((d, i) => {
               if (!d) return <div key={i} />;
-              const list = monthComps.filter((c) => c.date === d);
+              const list = monthComps.filter((c) => onDay(c, d));
               return (
                 <button
                   key={d}
@@ -290,7 +293,7 @@ function Resumen() {
                     className="rounded-lg border border-border bg-card p-3 text-sm shadow-2xs"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-foreground">{nameOf(c.workerId)}</span>
+                      <span className="font-medium text-foreground">{c.workerName}</span>
                       <StatusBadge status={c.status} />
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
@@ -302,14 +305,6 @@ function Resumen() {
                       <span>•</span>
                       <span className="font-semibold text-foreground">{fmtMin(c.minutes)}</span>
                     </div>
-                    <div className="mt-1.5 text-xs text-muted-foreground">
-                      <b>Motivo:</b> {c.reason || "Sin motivo registrado"}
-                    </div>
-                    {c.reviewNote && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        <b>Observación de revisión:</b> {c.reviewNote}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

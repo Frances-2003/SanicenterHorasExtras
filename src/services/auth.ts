@@ -1,4 +1,22 @@
-import type { Role, User } from "@/types";
+import type { Role, User } from "../types";
+
+/** Primary area remains authorized; optional additional areas support existing profiles. */
+export function authorizedAreasOf(user: User): string[] {
+  const additional = Array.isArray(user.authorizedAreas) ? user.authorizedAreas : [];
+  return [
+    ...new Set(
+      [user.area, ...additional].filter(
+        (area): area is string => typeof area === "string" && area.length > 0,
+      ),
+    ),
+  ];
+}
+export function canManageArea(user: User, area: string): boolean {
+  return (
+    user.active &&
+    (user.role === "admin" || (user.role === "jefe" && authorizedAreasOf(user).includes(area)))
+  );
+}
 
 /**
  * Permisos y reglas de autorización centralizadas del sistema Sani Center Horas Extras.
@@ -47,6 +65,7 @@ export function hasRouteAccess(role: Role, route: string): boolean {
     case "/compensaciones":
       return role === "trabajador";
     case "/solicitudes":
+    case "/dashboard":
       return role === "jefe" || role === "admin";
     case "/resumen":
       return true; // Todos acceden, trabajador ve sus datos y jefe/admin el equipo
@@ -56,4 +75,3 @@ export function hasRouteAccess(role: Role, route: string): boolean {
       return false;
   }
 }
-

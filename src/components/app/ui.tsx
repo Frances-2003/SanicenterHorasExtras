@@ -32,16 +32,22 @@ const STYLES: Record<CompStatus | OvertimeStatus, string> = {
   pendiente: "bg-warning-soft text-warning",
   aprobada: "bg-secondary text-primary",
   activo: "bg-secondary text-primary",
-  rechazada: "bg-destructive-soft text-destructive",
   anulado: "bg-destructive-soft text-destructive",
+  rechazada: "bg-destructive-soft text-destructive",
+  anulada: "bg-destructive-soft text-destructive",
+  cancelacion_pendiente: "bg-warning-soft text-warning",
+  efectuada: "bg-secondary text-primary",
 };
 
 const LABELS: Record<CompStatus | OvertimeStatus, string> = {
   pendiente: "Pendiente",
   aprobada: "Aprobada",
-  rechazada: "Rechazada",
-  activo: "Acumulado",
+  activo: "Legado: requiere revisión",
   anulado: "Anulado",
+  rechazada: "Rechazada",
+  anulada: "Anulada",
+  cancelacion_pendiente: "Anulación pendiente",
+  efectuada: "Efectuada",
 };
 
 export function StatusBadge({ status }: { status: CompStatus | OvertimeStatus }) {

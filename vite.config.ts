@@ -7,6 +7,15 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  vite: {
+    server: {
+      watch: { ignored: ["**/playwright-report/**", "**/test-results/**", "**/*.log"] },
+      proxy: {
+        "/api/workflow": "http://127.0.0.1:8788",
+        "/api/local-health": "http://127.0.0.1:8788",
+      },
+    },
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

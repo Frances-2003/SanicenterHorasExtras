@@ -10,36 +10,38 @@ import {
 } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { auth, useCurrentUser, useStore } from "@/services/store";
+import { isEmulatorMode } from "@/lib/emulator-config";
 import type { Role } from "@/types";
 
 const NAV: {
-  to: "/horas" | "/compensaciones" | "/solicitudes" | "/resumen" | "/admin";
+  to: "/horas" | "/compensaciones" | "/solicitudes" | "/resumen" | "/admin" | "/dashboard";
   label: string;
   icon: typeof Clock;
   roles: Role[];
 }[] = [
-    { to: "/horas", label: "Mis horas extras", icon: Clock, roles: ["trabajador"] },
-    {
-      to: "/compensaciones",
-      label: "Mis compensaciones",
-      icon: CalendarClock,
-      roles: ["trabajador"],
-    },
-    { to: "/horas", label: "Horas extras", icon: Clock, roles: ["jefe", "admin"] },
-    {
-      to: "/solicitudes",
-      label: "Solicitudes pendientes",
-      icon: ClipboardCheck,
-      roles: ["jefe", "admin"],
-    },
-    {
-      to: "/resumen",
-      label: "Resumen",
-      icon: LayoutDashboard,
-      roles: ["trabajador", "jefe", "admin"],
-    },
-    { to: "/admin", label: "Administración", icon: ShieldCheck, roles: ["admin"] },
-  ];
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["jefe", "admin"] },
+  { to: "/horas", label: "Mis horas extras", icon: Clock, roles: ["trabajador"] },
+  {
+    to: "/compensaciones",
+    label: "Mis compensaciones",
+    icon: CalendarClock,
+    roles: ["trabajador"],
+  },
+  { to: "/horas", label: "Horas extras", icon: Clock, roles: ["jefe", "admin"] },
+  {
+    to: "/solicitudes",
+    label: "Solicitudes pendientes",
+    icon: ClipboardCheck,
+    roles: ["jefe", "admin"],
+  },
+  {
+    to: "/resumen",
+    label: "Resumen",
+    icon: LayoutDashboard,
+    roles: ["trabajador", "jefe", "admin"],
+  },
+  { to: "/admin", label: "Administración", icon: ShieldCheck, roles: ["admin"] },
+];
 export const ROLE_LABEL: Record<Role, string> = {
   trabajador: "Trabajador",
   jefe: "Jefe",
@@ -59,6 +61,7 @@ export function AppShell({
 }) {
   const user = useCurrentUser();
   const authLoading = useStore().authLoading;
+  const dataError = useStore().dataError;
   const navigate = useNavigate();
 
   const allowed = user && (!roles || roles.includes(user.role));
@@ -72,9 +75,7 @@ export function AppShell({
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">
-          Verificando sesión...
-        </p>
+        <p className="text-sm text-muted-foreground">Verificando sesión...</p>
       </div>
     );
   }
@@ -83,6 +84,11 @@ export function AppShell({
   const items = NAV.filter((n) => n.roles.includes(user.role));
   return (
     <div className="min-h-screen bg-background">
+      {isEmulatorMode && (
+        <div className="bg-secondary px-4 py-1 text-center text-xs text-primary">
+          Entorno local de pruebas · Datos ficticios
+        </div>
+      )}
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
           <div className="flex items-center gap-2 font-bold">
@@ -129,6 +135,14 @@ export function AppShell({
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
         </div>
+        {dataError && (
+          <p
+            role="alert"
+            className="mb-4 rounded-lg bg-destructive-soft p-3 text-sm text-destructive"
+          >
+            {dataError}
+          </p>
+        )}
         {allowed ? children : <Empty text="No tienes acceso a esta sección con tu rol actual." />}
       </main>
     </div>

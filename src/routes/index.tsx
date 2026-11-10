@@ -1,12 +1,12 @@
-
 import { createFileRoute } from "@tanstack/react-router";
 import { Eye, EyeOff, LockKeyhole, UserRound, ArrowRight, ShieldCheck } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { firebaseAuth, db } from "@/lib/firebase";
+import { isEmulatorMode, requireLocalServices } from "@/lib/emulator-config";
 import type { User } from "@/types";
 
 export const Route = createFileRoute("/")({
@@ -23,12 +23,13 @@ export const Route = createFileRoute("/")({
 });
 
 function Login() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,15 +44,12 @@ function Login() {
     setLoading(true);
 
     try {
+      await requireLocalServices();
       // Identificador técnico usado únicamente por Firebase Authentication.
       const email = `${normalizedUsername.toLowerCase()}@auth.sanicenter.invalid`;
 
       // Verificar credenciales.
-      const credential = await signInWithEmailAndPassword(
-        firebaseAuth,
-        email,
-        password
-      );
+      const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
 
       // Consultar el perfil vinculado al UID.
       const profileRef = doc(db, "users", credential.user.uid);
@@ -69,10 +67,7 @@ function Login() {
       } as User;
 
       // Verificar que el usuario esté activo y corresponda al perfil.
-      if (
-        profile.active !== true ||
-        profile.username !== normalizedUsername
-      ) {
+      if (profile.active !== true || profile.username !== normalizedUsername) {
         await signOut(firebaseAuth);
         toast.error("Tu cuenta no está autorizada para ingresar.");
         return;
@@ -101,10 +96,14 @@ function Login() {
     }
   };
 
-
   return (
     <div className="grid min-h-screen place-items-center bg-muted px-4 py-8">
       <div className="card w-full max-w-md p-7 sm:p-8">
+        {isEmulatorMode && (
+          <p className="mb-4 rounded-lg bg-secondary p-2 text-center text-xs text-primary">
+            Entorno local de pruebas · Datos ficticios
+          </p>
+        )}
         <div className="mb-8 flex items-center gap-3">
           <img
             src="/logo.png"
@@ -123,26 +122,22 @@ function Login() {
         </div>
 
         <div className="mb-7">
-          <h2 className="text-xl font-semibold tracking-tight">
-            Bienvenido
-          </h2>
+          <h2 className="text-xl font-semibold tracking-tight">Bienvenido</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Ingresa tus credenciales para acceder al sistema.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-
           <div>
             <label htmlFor="username" className="field-label">
               Nombre de usuario
             </label>
             <div className="relative mt-1.5">
-              <UserRound
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              />
+              <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="username"
+                disabled={!ready || loading}
                 name="username"
                 type="text"
                 autoComplete="username"
@@ -162,11 +157,10 @@ function Login() {
               Contraseña
             </label>
             <div className="relative mt-1.5">
-              <LockKeyhole
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              />
+              <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="password"
+                disabled={!ready || loading}
                 name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
@@ -182,18 +176,14 @@ function Login() {
                 aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-primary"
               >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={!ready || loading}
             className="btn-primary flex w-full items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Verificando..." : "Iniciar sesión"}
