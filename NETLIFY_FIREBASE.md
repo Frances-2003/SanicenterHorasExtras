@@ -1,6 +1,10 @@
 # Activación futura: Netlify y Firebase sanicenterdb
 
+**Guía de cierre vigente:** [PUBLICACION_FINAL.md](PUBLICACION_FINAL.md). El build ahora empaqueta las dos funciones publicables y usa runtime productivo sin emuladores. `npm.cmd run build` es el build Netlify; las rutas y comandos anteriores se conservan abajo como antecedente.
+
 Actualizado: 10/11/2026. **Preparación local completada; producción deshabilitada.** Este documento sustituye las instrucciones anteriores de alojamiento y dependencias. No se desplegó, modificó producción, creó credenciales reales ni habilitó facturación.
+
+**Acceso local actualizado:** `npm.cmd run dev` habilita únicamente el login real de sanicenterdb en http://localhost:8081, con todas las operaciones financieras reales bloqueadas. `npm.cmd run local` inicia el demo aislado en http://127.0.0.1:8080. Véase [ACCESO_NORMAL_Y_DEMO.md](ACCESO_NORMAL_Y_DEMO.md). Esta autorización de login local no habilita los builds de producción. La futura apertura financiera también requiere VITE_REAL_FINANCIAL_WRITES_ENABLED=true en el build autorizado, además de los controles del backend descritos aquí; actualmente permanece false.
 
 ## Implementación
 

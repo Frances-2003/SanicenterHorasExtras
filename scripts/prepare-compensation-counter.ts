@@ -12,4 +12,4 @@ if (
     "Aplicación real bloqueada: se necesita autorización explícita y ventana sin escritores.",
   );
 await initializeRuntime();
-console.log(JSON.stringify(await prepareCompensationCounter(getFirestore(), apply)));
+console.log(JSON.stringify(await prepareCompensationCounter(getFirestore(), apply, true)));

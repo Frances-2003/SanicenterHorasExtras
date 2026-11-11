@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { resolve, relative, isAbsolute } from "node:path";
 import { writeFileSync, readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import {
   FirestoreReadClient,
   consistentLogicalBackup,
@@ -53,13 +54,35 @@ try {
         verifiedTwoPasses: true,
       }),
     );
+  } else if (args[0] === "verify" && args[1]) {
+    if (statSync(args[1]).size > 64 * 1024 * 1024) throw new Error("Respaldo demasiado grande.");
+    const encrypted = readFileSync(args[1], "utf8");
+    const backup = decryptBackup(encrypted, passphrase);
+    if (
+      backup.version !== 1 ||
+      backup.databaseId !== "(default)" ||
+      backup.projectId !== "sanicenterdb" ||
+      !Array.isArray(backup.records) ||
+      !Array.isArray(backup.collectionPaths)
+    )
+      throw new Error("El archivo no es un respaldo completo reconocido de sanicenterdb.");
+    console.log(
+      JSON.stringify({
+        integrityVerified: true,
+        projectId: backup.projectId,
+        documents: backup.records.filter((d) => d.exists).length,
+        capturedAt: backup.capturedAt,
+        sha256: createHash("sha256").update(encrypted).digest("hex"),
+        restored: false,
+      }),
+    );
   } else if (args[0] === "restore-emulator" && args[1]) {
     if (statSync(args[1]).size > 64 * 1024 * 1024) throw new Error("Respaldo demasiado grande.");
     const backup = decryptBackup(readFileSync(args[1], "utf8"), passphrase);
     console.log(JSON.stringify(await restoreOnlyToEmulator(backup)));
   } else
     throw new Error(
-      "Uso: export --ack-read-only-sanicenterdb --writers-paused --out RUTA_ABSOLUTA.scbackup | restore-emulator ARCHIVO.scbackup. Nunca restaura en producción.",
+      "Uso: export --ack-read-only-sanicenterdb --writers-paused --out RUTA_ABSOLUTA.scbackup | verify ARCHIVO.scbackup | restore-emulator ARCHIVO.scbackup. Nunca restaura en producción.",
     );
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Respaldo cancelado.");

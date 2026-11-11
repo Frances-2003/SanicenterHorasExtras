@@ -58,6 +58,37 @@ afterAll(async () => {
   await deleteApp(app);
 });
 describe("Firestore rules", () => {
+  it("restricts calendar reads to a manager's authorized areas including list queries", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      for (const area of ["A", "B", "C"])
+        await setDoc(doc(context.firestore(), `calendar/scoped-${area}`), { active: true, area });
+    });
+    const bossDb = env.authenticatedContext("boss").firestore();
+    await assertSucceeds(getDoc(doc(bossDb, "calendar/scoped-A")));
+    await assertFails(getDoc(doc(bossDb, "calendar/scoped-B")));
+    await assertFails(getDocs(query(collection(bossDb, "calendar"), where("active", "==", true))));
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(bossDb, "calendar"),
+          where("active", "==", true),
+          where("area", "==", "A"),
+        ),
+      ),
+    );
+    await assertSucceeds(
+      getDoc(doc(env.authenticatedContext("multiBoss").firestore(), "calendar/scoped-B")),
+    );
+    await assertFails(
+      getDoc(doc(env.authenticatedContext("multiBoss").firestore(), "calendar/scoped-C")),
+    );
+    await assertSucceeds(
+      getDoc(doc(env.authenticatedContext("admin").firestore(), "calendar/scoped-C")),
+    );
+    await assertSucceeds(
+      getDoc(doc(env.authenticatedContext("w1").firestore(), "calendar/scoped-B")),
+    );
+  });
   it("protects dashboard reads and supports explicitly authorized additional areas", async () => {
     const workerDb = env.authenticatedContext("w1").firestore();
     await assertFails(getDocs(collection(workerDb, "users")));

@@ -1,12 +1,12 @@
 [build]
-  command = "npm run build:netlify"
+  command = "npm run build"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION = "24"
 
 [functions]
-  directory = "netlify/functions"
+  directory = ".netlify/functions-prepared"
   node_bundler = "esbuild"
   external_node_modules = ["firebase-admin", "@google-cloud/firestore", "@google-cloud/firestore-api"]
 

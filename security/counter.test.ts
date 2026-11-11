@@ -24,8 +24,18 @@ afterAll(async () => {
 });
 it("plans without writes, creates the missing counter once from historical codes and never touches overtime", async () => {
   const db = getFirestore(app);
+  expect(await prepareCompensationCounter(db)).toEqual({
+    action: "create-if-absent",
+    lastNumber: 0,
+    applied: false,
+  });
+  expect((await db.doc("counters/compensations").get()).exists).toBe(false);
   await db.doc("counters/overtime").set({ lastNumber: 987, legacy: true });
   await db.doc("compensations/old").set({ code: "CP-000042", legacy: "preserve" });
+  await expect(prepareCompensationCounter(db, true, true)).rejects.toThrow(
+    "existen compensaciones",
+  );
+  expect((await db.doc("counters/compensations").get()).exists).toBe(false);
   expect(await prepareCompensationCounter(db)).toEqual({
     action: "create-if-absent",
     lastNumber: 42,

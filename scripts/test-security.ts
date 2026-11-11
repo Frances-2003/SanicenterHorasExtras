@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+const selectedTests = process.argv.slice(2);
+if (selectedTests.some((name) => !/^security\/[a-zA-Z0-9_/-]+\.test\.ts$/.test(name)))
+  throw new Error("Selecciona únicamente archivos de prueba dentro de security/.");
 const env: NodeJS.ProcessEnv = {
   ...process.env,
   DEBUG: "",
@@ -25,7 +28,7 @@ const child = spawn(
     "demo-sanicenter",
     "--only",
     "firestore",
-    "node node_modules/vitest/vitest.mjs run --config vitest.security.config.ts",
+    `node node_modules/vitest/vitest.mjs run --config vitest.security.config.ts ${selectedTests.join(" ")}`,
   ],
   { env, stdio: "inherit", windowsHide: true },
 );

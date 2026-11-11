@@ -57,6 +57,8 @@ export async function execute(
       const own = uid === workerId && actor.role === "trabajador";
       const manager = uid !== workerId && canManageArea(actor, worker.area);
       if (!own && !manager) throw new WorkflowError("No tienes acceso a este trabajador.");
+      if (manager && recordSnap.exists && !canManageArea(actor, recordSnap.get("area")))
+        throw new WorkflowError("No tienes acceso al área original de esta solicitud.");
       const calendarRef = db.doc(`calendar/${recordRef.id}`);
       const calendarSnapshot = !overtime ? await tx.get(calendarRef) : null;
       if (calendarSnapshot?.exists) {

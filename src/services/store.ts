@@ -10,7 +10,13 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { db, firebaseAuth } from "@/lib/firebase";
-import { isEmulatorMode, isRealFirebaseEnabled, requireLocalServices } from "@/lib/emulator-config";
+import {
+  financialWritesEnabled,
+  isEmulatorMode,
+  isRealFirebaseEnabled,
+  realFirebaseConfigurationError,
+  requireLocalServices,
+} from "@/lib/emulator-config";
 import type { Allocation, CalendarEntry, Compensation, Overtime, User } from "@/types";
 import type { Command } from "./workflow";
 import { authorizedAreasOf } from "./auth";
@@ -88,7 +94,7 @@ function observe<T>(source: Query<DocumentData>, accept: (items: T[]) => void) {
           accept([]);
           set({
             dataError:
-              "No se pudieron cargar todos los datos. Revisa los permisos y vuelve a iniciar sesión.",
+              "Tu sesión está iniciada, pero no se pudieron leer algunos módulos. Revisa los permisos de Firestore; esto no indica un error de contraseña.",
           });
         }
       },
@@ -120,10 +126,25 @@ export function setAuthenticatedUser(user: User | null) {
   }
   observeScoped<Overtime>("overtime", (overtime) => set({ overtime }));
   observeScoped<Compensation>("compensations", (comps) => set({ comps }));
-  observe<CalendarEntry>(
-    query(collection(db, "calendar"), where("active", "==", true)),
-    (calendar) => set({ calendar }),
-  );
+  if (user.role === "jefe") {
+    const calendars = new Map<string, CalendarEntry[]>();
+    for (const area of authorizedAreasOf(user)) {
+      observe<CalendarEntry>(
+        query(collection(db, "calendar"), where("active", "==", true), where("area", "==", area)),
+        (entries) => {
+          calendars.set(area, entries);
+          set({
+            calendar: [...new Map([...calendars.values()].flat().map((e) => [e.id, e])).values()],
+          });
+        },
+      );
+    }
+  } else {
+    observe<CalendarEntry>(
+      query(collection(db, "calendar"), where("active", "==", true)),
+      (calendar) => set({ calendar }),
+    );
+  }
   if (user.role !== "trabajador") {
     observeScoped<User>("users", (users) =>
       set({ users: [...users.filter((u) => u.id !== user.id), user] }),
@@ -131,7 +152,7 @@ export function setAuthenticatedUser(user: User | null) {
   }
 }
 export function startAuthObserver() {
-  if (!isEmulatorMode && !isRealFirebaseEnabled) {
+  if (!isEmulatorMode && (!isRealFirebaseEnabled || realFirebaseConfigurationError)) {
     setAuthenticatedUser(null);
     return;
   }
@@ -171,6 +192,12 @@ export type Result = { ok: true; id?: string } | { ok: false; error: string };
 // Keep the same id after an uncertain network result. The server's atomic audit record makes retries idempotent.
 const pendingRequests = new Map<string, string>();
 async function mutate(command: Command): Promise<Result> {
+  if (!financialWritesEnabled)
+    return {
+      ok: false,
+      error:
+        "Las operaciones financieras reales están bloqueadas hasta su activación autorizada. Tu inicio de sesión continúa habilitado.",
+    };
   const user = firebaseAuth.currentUser;
   if (!user) return { ok: false, error: "Inicia sesión para continuar." };
   const key = `${user.uid}:${JSON.stringify(command)}`;

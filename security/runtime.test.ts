@@ -17,7 +17,7 @@ describe("Netlify activation safety", () => {
     );
     expect(() =>
       runtimePolicy({ ...production, FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099" }),
-    ).toThrow("inconsistente");
+    ).toThrow("emuladores");
     expect(() => runtimePolicy({ ...production, CONTEXT: "deploy-preview" })).toThrow("previews");
     expect(() => runtimePolicy({ ...production, APP_ORIGIN: "http://example.com" })).toThrow(
       "HTTPS",

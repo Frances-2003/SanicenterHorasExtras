@@ -10,7 +10,11 @@ import {
 } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { auth, useCurrentUser, useStore } from "@/services/store";
-import { isEmulatorMode } from "@/lib/emulator-config";
+import {
+  financialWritesEnabled,
+  isEmulatorMode,
+  isRealFirebaseEnabled,
+} from "@/lib/emulator-config";
 import type { Role } from "@/types";
 
 const NAV: {
@@ -87,6 +91,11 @@ export function AppShell({
       {isEmulatorMode && (
         <div className="bg-secondary px-4 py-1 text-center text-xs text-primary">
           Entorno local de pruebas · Datos ficticios
+        </div>
+      )}
+      {!isEmulatorMode && isRealFirebaseEnabled && !financialWritesEnabled && (
+        <div className="bg-secondary px-4 py-1 text-center text-xs text-primary">
+          Firebase real · Operaciones financieras bloqueadas hasta su activación
         </div>
       )}
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">

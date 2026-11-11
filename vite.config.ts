@@ -8,6 +8,41 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
+    plugins: [
+      {
+        name: "sanicenter-production-data-guard",
+        apply: "build",
+        transform(_code, id) {
+          if (/(?:^|[/\\])(?:demoData|local-fixtures)(?:\.[cm]?[jt]sx?)(?:\?|$)/.test(id))
+            throw new Error(
+              "Los datos de demostración no pueden formar parte de un build publicable.",
+            );
+          return null;
+        },
+      },
+      {
+        name: "sanicenter-local-api-guard",
+        configureServer(server) {
+          if (server.config.mode === "emulator") return;
+          server.middlewares.use((req, res, next) => {
+            const path = req.url?.split("?")[0];
+            const workflow = path?.startsWith("/api/workflow");
+            if (!workflow && !path?.startsWith("/api/local-health")) return next();
+            res.writeHead(workflow ? 503 : 404, {
+              "Content-Type": "application/json",
+              "Cache-Control": "no-store",
+            });
+            res.end(
+              JSON.stringify({
+                ok: false,
+                error:
+                  "El modo normal permite iniciar sesión; el backend financiero está deshabilitado.",
+              }),
+            );
+          });
+        },
+      },
+    ],
     server: {
       watch: { ignored: ["**/playwright-report/**", "**/test-results/**", "**/*.log"] },
       proxy: {

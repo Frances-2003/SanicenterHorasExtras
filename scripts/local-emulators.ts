@@ -5,6 +5,9 @@ import path from "node:path";
 const env = {
   ...process.env,
   WORKFLOW_EMULATOR_MODE: "1",
+  VITE_REAL_FIREBASE_ENABLED: "false",
+  VITE_REAL_FINANCIAL_WRITES_ENABLED: "false",
+  WORKFLOW_PRODUCTION_ENABLED: "false",
   GOOGLE_CLOUD_PROJECT: "demo-sanicenter",
   GCLOUD_PROJECT: "demo-sanicenter",
   FIRESTORE_EMULATOR_HOST: "127.0.0.1:8085",

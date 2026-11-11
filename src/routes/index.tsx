@@ -8,6 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { firebaseAuth, db } from "@/lib/firebase";
 import { isEmulatorMode, requireLocalServices } from "@/lib/emulator-config";
 import type { User } from "@/types";
+import { loginErrorCode, loginErrorMessage } from "@/lib/login-errors";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -89,8 +90,8 @@ function Login() {
         await navigate({ to: "/resumen" });
       }
     } catch (error) {
-      console.error("Error al iniciar sesión:", error);
-      toast.error("No se pudo iniciar sesión. Verifica tus credenciales.");
+      console.error("login_failed", { code: loginErrorCode(error) });
+      toast.error(loginErrorMessage(error));
     } finally {
       setLoading(false);
     }

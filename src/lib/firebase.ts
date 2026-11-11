@@ -1,15 +1,27 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
-import { isEmulatorMode, isRealFirebaseEnabled, LOCAL_FIREBASE } from "./emulator-config";
+import {
+  isEmulatorMode,
+  isRealFirebaseEnabled,
+  realFirebaseConfigurationError,
+  LOCAL_FIREBASE,
+} from "./emulator-config";
+const useRealFirebase = isRealFirebaseEnabled && !realFirebaseConfigurationError;
 
-const firebaseConfig =
-  isEmulatorMode || !isRealFirebaseEnabled
+const firebaseConfig = isEmulatorMode
+  ? {
+      apiKey: "demo-sanicenter-local-key",
+      authDomain: "demo-sanicenter.firebaseapp.com",
+      projectId: LOCAL_FIREBASE.projectId,
+      appId: "demo-sanicenter-local-app",
+    }
+  : !useRealFirebase
     ? {
-        apiKey: "demo-sanicenter-local-key",
-        authDomain: "demo-sanicenter.firebaseapp.com",
-        projectId: isEmulatorMode ? LOCAL_FIREBASE.projectId : "demo-sanicenter-disabled",
-        appId: "demo-sanicenter-local-app",
+        apiKey: "sanicenter-disabled-key",
+        authDomain: "sanicenter-disabled.invalid",
+        projectId: "sanicenter-disabled",
+        appId: "sanicenter-disabled-app",
       }
     : {
         apiKey: import.meta.env["VITE_FIREBASE_API_KEY"],
@@ -18,11 +30,9 @@ const firebaseConfig =
         appId: import.meta.env["VITE_FIREBASE_APP_ID"],
       };
 
-if (!isEmulatorMode && isRealFirebaseEnabled && firebaseConfig.projectId !== "sanicenterdb")
-  throw new Error("Proyecto Firebase real distinto del autorizado.");
 const appName = isEmulatorMode
   ? "sanicenter-emulator"
-  : isRealFirebaseEnabled
+  : useRealFirebase
     ? "[DEFAULT]"
     : "sanicenter-disabled";
 const existingApp = getApps().find((candidate) => candidate.name === appName);

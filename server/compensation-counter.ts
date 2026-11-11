@@ -1,5 +1,9 @@
 import type { Firestore } from "firebase-admin/firestore";
-export async function prepareCompensationCounter(db: Firestore, apply = false) {
+export async function prepareCompensationCounter(
+  db: Firestore,
+  apply = false,
+  requireEmpty = false,
+) {
   return db.runTransaction(async (tx) => {
     const ref = db.doc("counters/compensations");
     const existing = await tx.get(ref);
@@ -10,6 +14,10 @@ export async function prepareCompensationCounter(db: Firestore, apply = false) {
       return { action: "none", lastNumber: value, applied: false };
     }
     const records = await tx.get(db.collection("compensations"));
+    if (requireEmpty && !records.empty)
+      throw new Error(
+        "Creación detenida: existen compensaciones; no se autoriza inicializar CP en cero.",
+      );
     let max = 0;
     for (const d of records.docs) {
       const match = /^CP-(\d+)$/.exec(d.get("code") || "");
