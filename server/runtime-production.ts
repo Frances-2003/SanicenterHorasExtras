@@ -8,8 +8,18 @@ export class PolicyError extends Error {
     super(message);
   }
 }
+// An operator must opt in on the local Netlify process; never a browser-supplied flag.
+export function isAuthorizedLocalRuntime(env: NodeJS.ProcessEnv = process.env) {
+  return (
+    env["NETLIFY_DEV"] === "true" &&
+    env["CONTEXT"] === "dev" &&
+    env["WORKFLOW_LOCAL_REAL_ENABLED"] === "true" &&
+    env["APP_ORIGIN"] === "http://localhost:8888"
+  );
+}
 // Production has no imports, credentials or probes that depend on emulators.
 export function runtimePolicy(env: NodeJS.ProcessEnv = process.env) {
+  const localReal = isAuthorizedLocalRuntime(env);
   if (
     env["WORKFLOW_EMULATOR_MODE"] === "1" ||
     env["FIRESTORE_EMULATOR_HOST"] ||
@@ -20,18 +30,20 @@ export function runtimePolicy(env: NodeJS.ProcessEnv = process.env) {
     throw new PolicyError("Servicio real deshabilitado hasta completar la activación autorizada.");
   if (env["GOOGLE_CLOUD_PROJECT"] !== "sanicenterdb")
     throw new PolicyError("Configuración de entorno inconsistente.");
-  if (env["CONTEXT"] && env["CONTEXT"] !== "production")
+  if (env["CONTEXT"] && env["CONTEXT"] !== "production" && !localReal)
     throw new PolicyError("Los deploy previews no pueden acceder al proyecto real.");
   const origin = env["APP_ORIGIN"] || "";
   try {
     const url = new URL(origin);
-    if (url.protocol !== "https:" || url.origin !== origin) throw new Error();
+    if ((!localReal && url.protocol !== "https:") || url.origin !== origin) throw new Error();
   } catch {
     throw new PolicyError("Configura APP_ORIGIN con el origen HTTPS exacto.");
   }
   const writeMode = env["WORKFLOW_WRITE_MODE"] || "disabled";
   if (!["disabled", "pilot", "enabled"].includes(writeMode))
     throw new PolicyError("Modo de escritura inválido.");
+  if (localReal && writeMode !== "pilot" && writeMode !== "disabled")
+    throw new PolicyError("La ejecución local real requiere alcance limitado por UID.");
   const list = (key: string) =>
     (env[key] || "")
       .split(",")

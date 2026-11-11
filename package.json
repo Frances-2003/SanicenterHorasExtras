@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx scripts/dev-normal.ts",
+    "netlify:real": "tsx scripts/netlify-real.ts",
     "build": "node scripts/build-netlify.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

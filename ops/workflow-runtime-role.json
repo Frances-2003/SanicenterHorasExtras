@@ -1,0 +1,13 @@
+{
+  "title": "Sani Center workflow runtime",
+  "description": "Only workflow reads, transactions, document creation/update and Auth revocation lookup. No delete, user management, IAM or rules publication.",
+  "stage": "GA",
+  "includedPermissions": [
+    "datastore.databases.get",
+    "datastore.entities.get",
+    "datastore.entities.list",
+    "datastore.entities.create",
+    "datastore.entities.update",
+    "firebaseauth.users.get"
+  ]
+}

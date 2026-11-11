@@ -50,6 +50,8 @@ Nunca poner la identidad en VITE_*, Git, dist, netlify.toml ni informes. No reut
 
 La identidad debe tener permisos mínimos de lectura/listado/creación/actualización de entidades Firestore y transacciones, más `firebaseauth.users.get` para comprobar revocación. No necesita borrar documentos, gestionar usuarios, contraseñas, reglas o IAM. Un rol personalizado debe validarse con el servicio real antes de abrir escrituras; no se concede Owner/Editor automáticamente. La creación de identidad/IAM y el registro del secreto son acciones reales pendientes de autorización.
 
+En el runtime de Functions configurar también `NODE_OPTIONS=--experimental-require-module` para que Firebase Admin pueda cargar su dependencia ESM bajo Node 24/Lambda. No modifica permisos ni habilita escrituras. La ejecución local real mediante Netlify Dev tiene un launcher separado y requiere autorización de IAM, credencial y escrituras: [ops/BACKEND_REAL.md](ops/BACKEND_REAL.md).
+
 ## Publicar manualmente — lo ejecuta el propietario
 
 Estos comandos externos **no se ejecutaron** durante la preparación:
@@ -161,7 +163,7 @@ Ante incidente, pausar el sitio o publicar una versión con escrituras disabled.
 
 Spark es viable con el backend externo, sujeto a sus cuotas. Netlify tiene cuotas/costos independientes. El tamaño de historial, reintentos, lecturas del dashboard y distancia de región requieren medición real; las funciones síncronas tienen un límite de tiempo. Ante respuesta incierta, reenviar el mismo X-Request-Id/contenido y revisar auditoría. No debilitar transacciones para evitar cuotas. Esta preparación no habilita facturación.
 
-**Pendientes reales:** identidad/IAM/secreto del servidor, dominio final y despliegue/activación por el propietario. Las cuentas, sus dos correcciones, las reglas y CP ya están configurados; no repetir esas operaciones. La auditoría y el respaldo están completados. El respaldo anterior no incluye las cuentas creadas posteriormente; conservarlo, sin generar otra copia sin autorización. La comprobación final de IAM y conectividad de Netlify requiere el sitio publicado y sus credenciales; no se presenta como realizada localmente.
+**Pendientes para publicar:** introducir de forma privada la credencial existente en Netlify, configurar el dominio final y efectuar el despliegue/activación por el propietario. La identidad de servicio, IAM y la clave privada local ya se crearon y comprobaron con autorización; la entrada local está limitada a JBERNALES/JPAREDES, según [ops/BACKEND_REAL.md](ops/BACKEND_REAL.md). Las cuentas, sus dos correcciones, las reglas y CP ya están configurados; no repetir esas operaciones. La auditoría y el respaldo están completados. El respaldo anterior no incluye las cuentas creadas posteriormente; conservarlo, sin generar otra copia sin autorización. La conectividad del sitio de Netlify aún requiere su publicación; no se presenta como realizada.
 
 Verificación local de cierre: pruebas de aplicación aprobadas; 13 comprobaciones de producción, reglas, respaldo/restauración y contador aprobadas sin crear cuentas ni perfiles de prueba en Firebase. TypeScript y build/ZIP con Node 24 aprobados. Auditoría del runtime: cero vulnerabilidades; las herramientas de desarrollo mantienen avisos moderados (22 en la instalación final), sin altos/críticos. ESLint conserva ocho advertencias de Fast Refresh y cero errores. No se presentan estas pruebas como una validación de datos o IAM reales.
 

@@ -26,6 +26,7 @@ service-account*.json
 *firebase-adminsdk*.json
 *service_account*.json
 credentials*.json
+sanicenter-workflow.json
 *.pem
 *.key
 *.p12

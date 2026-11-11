@@ -39,6 +39,34 @@ afterEach(() => {
   fixtures.records.clear();
 });
 describe("Final production contract without Firebase access", () => {
+  it("allows a local real runtime only with Netlify Dev, explicit opt-in, fixed origin and limited UIDs", () => {
+    const local = {
+      ...env,
+      NETLIFY_DEV: "true",
+      CONTEXT: "dev",
+      WORKFLOW_LOCAL_REAL_ENABLED: "true",
+      APP_ORIGIN: "http://localhost:8888",
+      WORKFLOW_WRITE_MODE: "pilot",
+      WORKFLOW_ALLOWED_ACTOR_UIDS: "worker,boss",
+      WORKFLOW_ALLOWED_WORKER_UIDS: "worker",
+    };
+    expect(runtimePolicy(local).writeMode).toBe("pilot");
+    expect(() => requirePilotAccess("worker", "worker", local)).not.toThrow();
+    expect(() => requirePilotAccess("boss", "worker", local)).not.toThrow();
+    expect(() => requirePilotAccess("other", "worker", local)).toThrow("alcance");
+    expect(() => requirePilotAccess("boss", "other", local)).toThrow("alcance");
+    for (const changed of [
+      { NETLIFY_DEV: "false" },
+      { WORKFLOW_LOCAL_REAL_ENABLED: "false" },
+      { CONTEXT: "deploy-preview" },
+      { APP_ORIGIN: "http://remote.invalid:8888" },
+      { WORKFLOW_WRITE_MODE: "enabled" },
+    ])
+      expect(() => runtimePolicy({ ...local, ...changed })).toThrow();
+    expect(() => runtimePolicy({ ...local, WORKFLOW_PRODUCTION_ENABLED: "false" })).toThrow(
+      "deshabilitado",
+    );
+  });
   it("uses real runtime only and defaults to disabled writes", () => {
     expect(runtimePolicy(env).local).toBe(false);
     expect(runtimePolicy({ ...env, WORKFLOW_WRITE_MODE: "disabled" }).writeMode).toBe("disabled");
