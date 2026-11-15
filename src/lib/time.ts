@@ -31,6 +31,14 @@ export function fmtMin(m: number): string {
     mm = a % 60;
   return `${sign}${h}h ${String(mm).padStart(2, "0")}m`;
 }
+/** New requests use full hours; historical balances keep their original minutes. */
+export function isWholeHours(minutes: number): boolean {
+  return Number.isSafeInteger(minutes) && minutes >= 60 && minutes % 60 === 0;
+}
+export const HOUR_OPTIONS = Array.from(
+  { length: 24 },
+  (_, hour) => `${String(hour).padStart(2, "0")}:00`,
+);
 export function fmtDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;

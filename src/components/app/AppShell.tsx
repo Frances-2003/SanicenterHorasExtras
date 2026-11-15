@@ -24,7 +24,7 @@ const NAV: {
     to: "/compensaciones",
     label: "Mis compensaciones",
     icon: CalendarClock,
-    roles: ["trabajador"],
+    roles: ["trabajador", "jefe"],
   },
   { to: "/horas", label: "Horas extras", icon: Clock, roles: ["jefe", "admin"] },
   {
@@ -85,16 +85,7 @@ export function AppShell({
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <div className="flex items-center gap-2 font-bold">
-            <img
-              src="/logo.png"
-              alt="Logotipo de Sanicenter"
-              className="h-14 w-14 shrink-0 rounded-xl object-cover"
-            />
-            <span className="hidden sm:inline">
-              <span className="text-primary">Horas Extras</span>
-            </span>
-          </div>
+          <div className="shrink-0 font-bold text-primary">Horas Extras</div>
 
           <div className="ml-auto flex items-center gap-3">
             <div className="text-right leading-tight">

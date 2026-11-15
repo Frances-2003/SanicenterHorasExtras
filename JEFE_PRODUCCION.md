@@ -25,4 +25,4 @@ El área principal también concede acceso. Si solo administra Inventario, usar 
 
 Authentication y Firestore no comparten una transacción: si la cuenta se crea pero falla la creación del perfil, detener la activación y registrar su UID; no recrear, borrar ni reparar otra cuenta automáticamente. Sin perfil activo, esa cuenta no obtiene acceso financiero.
 
-El backend comprueba rol, áreas y prohibición de autoaprobación en cada transacción. Las reglas niegan escrituras directas desde el navegador incluso a jefes y administradores. No se necesitan custom claims ni cambios al login para reconocer esta cuenta.
+Por autorización expresa del propietario, el jefe puede registrar solicitudes personales pendientes y aprobarlas o rechazarlas en una operación separada. El backend comprueba rol y áreas en cada transacción: esta excepción no permite autoaprobación a trabajadores ni amplía las áreas de JPAREDES. La auditoría conserva `actorId`, `workerId` y `selfReview` en las revisiones propias. Las reglas siguen negando escrituras directas desde el navegador incluso a jefes y administradores. No se modifican perfiles, custom claims ni el login.

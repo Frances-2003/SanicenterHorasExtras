@@ -5,13 +5,15 @@ const marker = `UI-${Date.now()}`;
 const day = (offset: number) => `2024-06-${String(10 + offset).padStart(2, "0")}`;
 const flowUser = `QAANA${Date.now()}`;
 const concurrencyUser = `QALUIS${Date.now()}`;
+const personalBoss = `QAJEFE${Date.now()}`;
 let externalFirebase: string[] = [];
+let brandingRequests: string[] = [];
 
 test.beforeAll(async ({ request }) => {
   const health = await request.get("/api/local-health");
   expect(await health.json()).toEqual({ projectId: "demo-sanicenter", emulators: true });
   // Fresh local accounts make reruns independent, without deleting demo records or resetting counters.
-  for (const username of [flowUser, concurrencyUser]) {
+  for (const username of [flowUser, concurrencyUser, personalBoss]) {
     const created = await request.post(
       "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-sanicenter-local-key",
       {
@@ -32,7 +34,7 @@ test.beforeAll(async ({ request }) => {
           fields: {
             username: { stringValue: username },
             name: { stringValue: username },
-            role: { stringValue: "trabajador" },
+            role: { stringValue: username === personalBoss ? "jefe" : "trabajador" },
             area: { stringValue: "Almacen" },
             active: { booleanValue: true },
           },
@@ -48,8 +50,10 @@ test.beforeEach(async ({ page, request }) => {
   expect(health.ok()).toBeTruthy();
   expect(await health.json()).toEqual({ projectId: "demo-sanicenter", emulators: true });
   externalFirebase = [];
+  brandingRequests = [];
   await page.route("**/*", (route) => {
     const url = new URL(route.request().url());
+    if (["/logo.png", "/favicon.ico"].includes(url.pathname)) brandingRequests.push(url.pathname);
     if (
       ["127.0.0.1", "localhost"].includes(url.hostname) ||
       !["http:", "https:"].includes(url.protocol)
@@ -60,7 +64,10 @@ test.beforeEach(async ({ page, request }) => {
     return route.abort();
   });
 });
-test.afterEach(() => expect(externalFirebase, "No requests to real Firebase").toEqual([]));
+test.afterEach(() => {
+  expect(externalFirebase, "No requests to real Firebase").toEqual([]);
+  expect(brandingRequests, "No legacy logo or favicon requests").toEqual([]);
+});
 
 async function login(page: Page, username: string) {
   await page.goto("/");
@@ -74,9 +81,13 @@ async function logout(page: Page) {
   await expect(page.getByLabel("Nombre de usuario")).toBeVisible();
 }
 async function decide(page: Page, code: string, action: string) {
-  if (new URL(page.url()).pathname === "/horas")
+  if (new URL(page.url()).pathname === "/horas") {
+    await expect(page.locator('input[placeholder="HE-000001"]')).toBeVisible();
+    const team = page.getByRole("button", { name: "Horas extras del equipo", exact: true });
+    if (!(await page.getByRole("row").filter({ hasText: code }).count()) && (await team.count()))
+      await team.click();
     await page.locator('input[placeholder="HE-000001"]').fill(code);
-  else {
+  } else {
     const previous = page.getByRole("button", { name: "Anterior", exact: true });
     while (await previous.isEnabled()) await previous.click();
   }
@@ -104,8 +115,8 @@ async function createOvertime(
 ) {
   await page.goto("/horas");
   await page.locator("form input[type=date]").fill(date);
-  await page.locator("form input[type=time]").nth(0).fill(start);
-  await page.locator("form input[type=time]").nth(1).fill(end);
+  await page.getByLabel("Hora de inicio", { exact: true }).selectOption(start);
+  await page.getByLabel("Hora de fin", { exact: true }).selectOption(end);
   await page.locator("form input[list=reasons]").fill(reason);
   const saved = page.waitForResponse(
     (r) => r.url().endsWith("/api/workflow") && r.request().method() === "POST",
@@ -119,8 +130,8 @@ async function createOvertime(
 async function createComp(page: Page, sourceCode: string, reason: string, date: string) {
   await page.goto("/compensaciones");
   await page.locator("input[type=date]").first().fill(date);
-  await page.locator("input[type=time]").nth(0).fill("08:00");
-  await page.locator("input[type=time]").nth(1).fill("09:00");
+  await page.getByLabel("Inicio del descanso", { exact: true }).selectOption("08:00");
+  await page.getByLabel("Fin del descanso", { exact: true }).selectOption("09:00");
   await page.locator('input[placeholder^="Ej. Cita"]').fill(reason);
   await page.getByRole("checkbox", { name: `Seleccionar ${sourceCode}`, exact: true }).check();
   const saved = page.waitForResponse(
@@ -260,12 +271,14 @@ test("UI: roles, other areas, inactive accounts and shared colleague calendar", 
 }) => {
   await login(page, "JEFE");
   await page.goto("/horas");
+  await page.getByRole("button", { name: "Horas extras del equipo", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: "HE-001004" })).toHaveCount(0);
   await page.goto("/admin");
   await expect(page.getByText("No tienes acceso a esta sección con tu rol actual.")).toBeVisible();
   await logout(page);
   await login(page, "JEFEVENTAS");
   await page.goto("/horas");
+  await page.getByRole("button", { name: "Horas extras del equipo", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: "HE-001004" })).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: "HE-001001" })).toHaveCount(0);
   await logout(page);
@@ -291,6 +304,50 @@ test("UI: roles, other areas, inactive accounts and shared colleague calendar", 
   await expect(page.getByText("Tu cuenta no está autorizada para ingresar.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Cerrar sesión" })).toHaveCount(0);
 });
+
+for (const [label, width, height, date] of [
+  ["desktop", 1366, 900, "2024-05-01"],
+  ["mobile", 390, 844, "2024-05-03"],
+] as const) {
+  test(`UI: jefe personal pending requests, self-approval, whole-hour partial rest and text branding on ${label}`, async ({
+    page,
+  }) => {
+    test.setTimeout(90000);
+    await page.setViewportSize({ width, height });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Horas Extras", exact: true })).toBeVisible();
+    await expect(page.locator("img")).toHaveCount(0);
+    await login(page, personalBoss);
+    const ot = await createOvertime(page, `${marker}-self-${label}`, date, "18:00", "21:00");
+    await expect(page.locator("header").getByText("Horas Extras", { exact: true })).toBeVisible();
+    await expect(page.locator("header img")).toHaveCount(0);
+    expect(
+      await page
+        .getByLabel("Hora de inicio", { exact: true })
+        .locator("option")
+        .evaluateAll((options) =>
+          options.every((option) => (option as HTMLOptionElement).value.endsWith(":00")),
+        ),
+    ).toBe(true);
+    await decide(page, ot, "Aprobar");
+    await expect(page.getByRole("row").filter({ hasText: ot })).toContainText("Aprobada");
+    const comp = await createComp(page, ot, `${marker}-self-comp-${label}`, `2099${date.slice(4)}`);
+    await expect(page.getByRole("row").filter({ hasText: comp })).toContainText("Pendiente");
+    await decide(page, comp, "Aprobar");
+    await expect(page.getByRole("row").filter({ hasText: comp })).toContainText("Aprobada");
+    await expect(page.getByRole("row").filter({ hasText: ot }).first()).toContainText("2h 00m");
+    await expect(page.getByLabel("Minutos", { exact: true })).toHaveCount(0);
+    await page.getByRole("checkbox", { name: `Seleccionar ${ot}`, exact: true }).check();
+    await page.getByLabel(`Horas a utilizar de ${ot}`, { exact: true }).fill("1.5");
+    await expect(
+      page.getByRole("button", { name: "Enviar solicitud", exact: true }),
+    ).toBeDisabled();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.screenshot({ path: `test-results/personal-hours-${label}.png`, fullPage: true });
+  });
+}
 
 test("HTTP + Auth emulator: denied self-approval, foreign area, inactive, forged role, no-token", async ({
   request,

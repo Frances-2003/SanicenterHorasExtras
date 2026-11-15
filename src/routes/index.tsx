@@ -6,14 +6,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { firebaseAuth, db } from "@/lib/firebase";
-import { isEmulatorMode, requireLocalServices } from "@/lib/emulator-config";
+import { requireLocalServices } from "@/lib/emulator-config";
 import type { User } from "@/types";
 import { loginErrorCode, loginErrorMessage } from "@/lib/login-errors";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Ingresar — Sani Center Horas Extras" },
+      { title: "Ingresar — Horas Extras" },
       {
         name: "description",
         content: "Sistema de control de horas extras y compensaciones de Sanicenter.",
@@ -100,21 +100,10 @@ function Login() {
   return (
     <div className="grid min-h-screen place-items-center bg-muted px-4 py-8">
       <div className="card w-full max-w-md p-7 sm:p-8">
-        {isEmulatorMode && (
-          <p className="mb-4 rounded-lg bg-secondary p-2 text-center text-xs text-primary">
-            Entorno local de pruebas · Datos ficticios
-          </p>
-        )}
         <div className="mb-8 flex items-center gap-3">
-          <img
-            src="/logo.png"
-            alt="Logotipo de Sanicenter"
-            className="h-14 w-14 shrink-0 rounded-xl object-cover"
-          />
-
           <div>
             <h1 className="text-lg font-bold tracking-tight">
-              Sani Center<span className="text-primary"> Horas Extras</span>
+              <span className="text-primary">Horas Extras</span>
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
               Control de horas extras y compensaciones

@@ -2,7 +2,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { commandSchema, transition, WorkflowError, type Command } from "../src/services/workflow";
 import type { Compensation, Overtime, User } from "../src/types";
-import { canManageArea } from "../src/services/auth";
+import { canManageArea, canRegisterOvertime, canReviewRequestsFor } from "../src/services/auth";
 import { PolicyError } from "./runtime";
 
 /** All database mutations are centralized here, behind store.ts's authenticated API. */
@@ -16,7 +16,9 @@ export async function execute(
     throw new PolicyError("La ejecución real requiere el control de acceso del endpoint.");
   const parsed = commandSchema.safeParse(raw);
   if (!parsed.success)
-    throw new WorkflowError("Solicitud inválida: revisa horarios, motivo y minutos enteros.");
+    throw new WorkflowError(
+      "Solicitud inválida: revisa horarios, motivo y horas completas (mínimo 1 hora).",
+    );
   const command = parsed.data as Command;
   const db = getFirestore();
   const creates = command.action === "addOvertime" || command.action === "requestCompensation";
@@ -52,10 +54,10 @@ export async function execute(
       options?.authorizeWorker(workerId);
       const workerSnap = await tx.get(db.doc(`users/${workerId}`));
       const worker = { ...workerSnap.data(), id: workerId } as User;
-      if (!workerSnap.exists || worker.active !== true || worker.role !== "trabajador")
+      if (!workerSnap.exists || !canRegisterOvertime(worker))
         throw new WorkflowError("Trabajador inactivo o inexistente.");
-      const own = uid === workerId && actor.role === "trabajador";
-      const manager = uid !== workerId && canManageArea(actor, worker.area);
+      const own = uid === workerId && canRegisterOvertime(actor);
+      const manager = canReviewRequestsFor(actor, worker);
       if (!own && !manager) throw new WorkflowError("No tienes acceso a este trabajador.");
       if (manager && recordSnap.exists && !canManageArea(actor, recordSnap.get("area")))
         throw new WorkflowError("No tienes acceso al área original de esta solicitud.");
@@ -167,6 +169,10 @@ export async function execute(
       tx.create(auditRef, {
         actorId: uid,
         actorRole: actor.role,
+        selfReview:
+          uid === workerId &&
+          actor.role === "jefe" &&
+          ["reviewOvertime", "reviewCompensation"].includes(command.action),
         workerId,
         area: worker.area,
         action: command.action,

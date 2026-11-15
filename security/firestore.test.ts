@@ -12,6 +12,8 @@ import { getFirestore } from "firebase-admin/firestore";
 import { execute } from "../server/workflow-store";
 import { randomUUID } from "node:crypto";
 import { securityEmulatorCredential } from "../server/emulator-safety";
+import { balanceOf } from "../src/services/ledger";
+import type { Compensation, Overtime } from "../src/types";
 let env: RulesTestEnvironment;
 const projectId = "demo-sanicenter";
 const app = initializeApp({ projectId, credential: securityEmulatorCredential() });
@@ -357,5 +359,130 @@ describe("Trusted transaction security and concurrency", () => {
     ).rejects.toThrow("aprobado");
     expect((await db.doc(`compensations/${next.id}`).get()).get("status")).toBe("efectuada");
     expect((await db.collection("audit").where("recordId", "==", next.id).get()).size).toBe(3);
+  });
+});
+
+describe("Jefe personal workflow with unchanged client-write rules", () => {
+  it("creates pending own requests, reviews them separately, audits self-review and preserves area restrictions", async () => {
+    const db = getFirestore(app);
+    const beforeHE = (await db.doc("counters/overtime").get()).get("lastNumber");
+    const beforeCP = (await db.doc("counters/compensations").get()).get("lastNumber");
+    const created = await execute("boss", randomUUID(), {
+      action: "addOvertime",
+      date: "2026-10-25",
+      start: "23:00",
+      end: "02:00",
+      reason: "Trabajo personal",
+    });
+    let ot = {
+      ...(await db.doc(`overtime/${created.id}`).get()).data(),
+      id: created.id,
+    } as Overtime;
+    expect(ot.status).toBe("pendiente");
+    expect(ot.workerId).toBe("boss");
+    expect(balanceOf("boss", [ot], []).available).toBe(0);
+    const review = {
+      action: "reviewOvertime",
+      id: created.id,
+      approve: true,
+      note: "Revisión propia",
+    };
+    await expect(execute("otherBoss", randomUUID(), review)).rejects.toThrow("acceso");
+    await expect(execute("w1", randomUUID(), review)).rejects.toThrow("acceso");
+    const reviewId = randomUUID();
+    await execute("boss", reviewId, review);
+    await execute("boss", reviewId, review);
+    ot = { ...(await db.doc(`overtime/${created.id}`).get()).data(), id: created.id } as Overtime;
+    expect(balanceOf("boss", [ot], []).available).toBe(180);
+    expect((await db.doc(`audit/${reviewId}`).get()).data()).toMatchObject({
+      actorId: "boss",
+      workerId: "boss",
+      actorRole: "jefe",
+      selfReview: true,
+      afterStatus: "aprobada",
+    });
+    const comp = await execute("boss", randomUUID(), {
+      action: "requestCompensation",
+      date: "2099-11-01",
+      start: "08:00",
+      end: "09:00",
+      reason: "Descanso propio",
+      allocations: [{ overtimeId: created.id, minutes: 60 }],
+    });
+    let cp = {
+      ...(await db.doc(`compensations/${comp.id}`).get()).data(),
+      id: comp.id,
+    } as Compensation;
+    expect(cp.status).toBe("pendiente");
+    expect(balanceOf("boss", [ot], [cp])).toMatchObject({ available: 120, reserved: 60 });
+    const approvalId = randomUUID();
+    await execute("boss", approvalId, {
+      action: "reviewCompensation",
+      id: comp.id,
+      approve: true,
+      note: "Aprobación propia",
+    });
+    cp = {
+      ...(await db.doc(`compensations/${comp.id}`).get()).data(),
+      id: comp.id,
+    } as Compensation;
+    expect(cp.status).toBe("aprobada");
+    expect(cp.reviewedBy).toBe("boss");
+    expect(balanceOf("boss", [ot], [cp])).toMatchObject({
+      available: 120,
+      approved: 60,
+      reserved: 0,
+    });
+    expect((await db.doc(`audit/${approvalId}`).get()).data()).toMatchObject({
+      actorId: "boss",
+      workerId: "boss",
+      selfReview: true,
+    });
+    expect((await db.doc(`calendar/${comp.id}`).get()).get("active")).toBe(true);
+    const client = env.authenticatedContext("boss").firestore();
+    await assertSucceeds(
+      getDocs(query(collection(client, "overtime"), where("workerId", "==", "boss"))),
+    );
+    await assertFails(setDoc(doc(client, `overtime/${created.id}`), { status: "aprobada" }));
+    await assertFails(setDoc(doc(client, `compensations/${comp.id}`), { status: "aprobada" }));
+    await assertFails(getDoc(doc(client, "overtime/area-b")));
+    expect((await db.doc("counters/overtime").get()).get("lastNumber")).toBe(beforeHE + 1);
+    expect((await db.doc("counters/compensations").get()).get("lastNumber")).toBe(beforeCP + 1);
+  });
+  it("rejects fractional new requests before changing counters or creating financial records", async () => {
+    const db = getFirestore(app);
+    const he = await db.doc("counters/overtime").get(),
+      cp = await db.doc("counters/compensations").get();
+    for (const uid of ["w1", "boss"]) {
+      for (const end of ["18:15", "18:30", "18:45", "19:30"])
+        await expect(
+          execute(uid, randomUUID(), {
+            action: "addOvertime",
+            date: "2026-10-27",
+            start: "18:00",
+            end,
+            reason: "Fracción",
+          }),
+        ).rejects.toThrow("horas completas");
+      await expect(
+        execute(uid, randomUUID(), {
+          action: "requestCompensation",
+          date: "2099-12-01",
+          start: "08:00",
+          end: "09:00",
+          reason: "Fracciones por origen",
+          allocations: [
+            { overtimeId: "one", minutes: 30 },
+            { overtimeId: "two", minutes: 30 },
+          ],
+        }),
+      ).rejects.toThrow("horas completas");
+    }
+    expect((await db.doc("counters/overtime").get()).updateTime?.toMillis()).toBe(
+      he.updateTime!.toMillis(),
+    );
+    expect((await db.doc("counters/compensations").get()).updateTime?.toMillis()).toBe(
+      cp.updateTime!.toMillis(),
+    );
   });
 });

@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import { AppShell, Empty } from "@/components/app/AppShell";
 import { Pager, Stat, StatusBadge, paginate } from "@/components/app/ui";
 import { nextCompCode, requestCompensation, useCurrentUser, useStore } from "@/services/store";
-import { availableFor, balanceOf, usedMinutes } from "@/services/ledger";
-import { diffMinutes, fmtDate, fmtMin } from "@/lib/time";
+import { availableFor, balanceOf, usedMinutes, validateAllocations } from "@/services/ledger";
+import { diffMinutes, fmtDate, fmtMin, HOUR_OPTIONS, isWholeHours } from "@/lib/time";
 import { WorkflowActions } from "@/components/app/WorkflowActions";
 import { overlaps } from "@/services/workflow";
 
@@ -32,7 +32,7 @@ function Compensaciones() {
   const user = useCurrentUser();
   const { overtime, comps, calendar } = useStore();
   const [form, setForm] = useState({ date: "", start: "08:00", end: "10:00", reason: "" });
-  const [alloc, setAlloc] = useState<Record<string, { h: number; m: number }>>({});
+  const [alloc, setAlloc] = useState<Record<string, number>>({});
   const [page, setPage] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const total = diffMinutes(form.start, form.end);
@@ -47,7 +47,7 @@ function Compensaciones() {
           avail: availableFor(o, comps),
           used: usedMinutes(o.id, comps),
         }))
-        .filter((x) => x.avail > 0)
+        .filter((x) => x.avail >= 60)
         .sort((a, b) => a.o.date.localeCompare(b.o.date)),
     [overtime, comps, user],
   );
@@ -65,35 +65,30 @@ function Compensaciones() {
   const bal = balanceOf(user.id, overtime, comps);
   const minsOf = (id: string) => {
     const a = alloc[id];
-    return a ? a.h * 60 + a.m : 0;
+    return (a ?? 0) * 60;
   };
   const selectedSum = Object.keys(alloc).reduce((s, id) => s + minsOf(id), 0);
+  const wholeSelection = Object.values(alloc).every(
+    (hours) => Number.isSafeInteger(hours) && hours >= 1,
+  );
   const diff = total - selectedSum;
   const codeOf = (id: string) => overtime.find((o) => o.id === id)?.code ?? id;
 
   const toggle = (id: string, avail: number) =>
     setAlloc((p) => {
       const n = { ...p };
-      if (n[id]) {
+      if (Object.hasOwn(n, id)) {
         delete n[id];
       } else {
         const needed = Math.max(0, total - selectedSum);
-        const take = Math.min(avail, needed > 0 ? needed : Math.min(avail, 60));
-        n[id] = { h: Math.floor(take / 60), m: take % 60 };
+        const take = Math.min(Math.floor(avail / 60), Math.max(1, Math.floor(needed / 60)));
+        n[id] = take;
       }
       return n;
     });
 
-  const setPart = (id: string, part: "h" | "m", v: number, avail: number) =>
-    setAlloc((p) => {
-      const cur = { h: 0, m: 0, ...p[id] };
-      cur[part] = Math.max(0, Math.floor(v || 0));
-      if (cur.h * 60 + cur.m > avail) {
-        cur.h = Math.floor(avail / 60);
-        cur.m = avail % 60;
-      }
-      return { ...p, [id]: cur };
-    });
+  const setHours = (id: string, hours: number, avail: number) =>
+    setAlloc((p) => ({ ...p, [id]: Math.max(0, Math.min(hours || 0, Math.floor(avail / 60))) }));
 
   const submit = async () => {
     if (isSubmitting) return;
@@ -102,8 +97,10 @@ function Compensaciones() {
       toast.error("Indica la fecha en que deseas compensar el descanso.");
       return;
     }
-    if (total <= 0) {
-      toast.error("El horario de descanso debe representar una duración mayor a 0.");
+    if (!isWholeHours(total) || !wholeSelection) {
+      toast.error(
+        "El descanso y cada asignación deben ser horas completas, con un mínimo de 1 hora.",
+      );
       return;
     }
     if (diff !== 0) {
@@ -113,12 +110,15 @@ function Compensaciones() {
       return;
     }
 
-    const allocations = Object.keys(alloc)
-      .map((id) => ({ overtimeId: id, minutes: minsOf(id) }))
-      .filter((a) => a.minutes > 0);
+    const allocations = Object.keys(alloc).map((id) => ({ overtimeId: id, minutes: minsOf(id) }));
 
     if (!allocations.length) {
       toast.error("Debes seleccionar al menos un registro de origen.");
+      return;
+    }
+    const allocationError = validateAllocations(user.id, total, allocations, overtime, comps, true);
+    if (allocationError) {
+      toast.error(allocationError);
       return;
     }
 
@@ -150,7 +150,7 @@ function Compensaciones() {
     <AppShell
       title="Mis compensaciones"
       subtitle="Solicita descansos compensatorios seleccionando manualmente las horas extras acumuladas de origen."
-      roles={["trabajador"]}
+      roles={["trabajador", "jefe"]}
     >
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
@@ -194,21 +194,33 @@ function Compensaciones() {
           </div>
           <div>
             <label className="field-label">Inicio del descanso</label>
-            <input
-              type="time"
+            <select
+              aria-label="Inicio del descanso"
               className="field"
               value={form.start}
               onChange={(e) => setForm({ ...form, start: e.target.value })}
-            />
+            >
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hour}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="field-label">Fin del descanso</label>
-            <input
-              type="time"
+            <select
+              aria-label="Fin del descanso"
               className="field"
               value={form.end}
               onChange={(e) => setForm({ ...form, end: e.target.value })}
-            />
+            >
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hour}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="field-label">Total a utilizar</label>
@@ -234,11 +246,12 @@ function Compensaciones() {
           Selección manual de horas extras de origen
         </h3>
         <p className="mb-3 text-xs text-muted-foreground">
-          Selecciona los registros y define los minutos que deseas descontar de cada uno.
+          Selecciona los registros y las horas completas que deseas utilizar de cada uno. Los
+          minutos históricos restantes se conservan.
         </p>
 
         {sources.length === 0 ? (
-          <Empty text="No tienes horas extras con saldo disponible para compensar." />
+          <Empty text="No tienes registros con al menos una hora completa disponible para compensar." />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full text-sm">
@@ -251,12 +264,12 @@ function Compensaciones() {
                   <th className="th">Horas registradas</th>
                   <th className="th">Utilizadas / reservadas</th>
                   <th className="th">Saldo restante</th>
-                  <th className="th">Minutos a utilizar</th>
+                  <th className="th">Horas a utilizar</th>
                 </tr>
               </thead>
               <tbody>
                 {sources.map(({ o, avail, used }) => {
-                  const on = !!alloc[o.id];
+                  const on = Object.hasOwn(alloc, o.id);
                   return (
                     <tr key={o.id} className={on ? "bg-secondary/60 font-medium" : ""}>
                       <td className="td">
@@ -279,24 +292,15 @@ function Compensaciones() {
                           <div className="flex items-center gap-1.5">
                             <input
                               type="number"
-                              min={0}
+                              min={1}
+                              max={Math.floor(avail / 60)}
+                              step={1}
                               className="field w-16 px-2 py-1 text-center"
-                              value={alloc[o.id]?.h ?? 0}
-                              onChange={(e) => setPart(o.id, "h", +e.target.value, avail)}
-                              aria-label="Horas"
+                              value={alloc[o.id] ?? 0}
+                              onChange={(e) => setHours(o.id, +e.target.value, avail)}
+                              aria-label={`Horas a utilizar de ${o.code}`}
                             />
                             <span className="text-xs">h</span>
-                            <input
-                              type="number"
-                              min={0}
-                              max={59}
-                              step={5}
-                              className="field w-16 px-2 py-1 text-center"
-                              value={alloc[o.id]?.m ?? 0}
-                              onChange={(e) => setPart(o.id, "m", +e.target.value, avail)}
-                              aria-label="Minutos"
-                            />
-                            <span className="text-xs">m</span>
                             <span className="ml-1 text-xs text-muted-foreground">
                               ({fmtMin(minsOf(o.id))})
                             </span>
@@ -331,7 +335,14 @@ function Compensaciones() {
             type="button"
             className="btn-primary disabled:opacity-50"
             onClick={submit}
-            disabled={!form.date || total <= 0 || diff !== 0 || selectedSum === 0 || isSubmitting}
+            disabled={
+              !form.date ||
+              !isWholeHours(total) ||
+              !wholeSelection ||
+              diff !== 0 ||
+              selectedSum === 0 ||
+              isSubmitting
+            }
           >
             <Send className="h-4 w-4" />
             {isSubmitting ? "Enviando..." : "Enviar solicitud"}
@@ -397,7 +408,7 @@ function Compensaciones() {
                       )}
                     </td>
                     <td className="td">
-                      <WorkflowActions record={c} manager={false} />
+                      <WorkflowActions record={c} manager={user.role === "jefe"} owner />
                     </td>
                   </tr>
                 ))}

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Compensation, Overtime, User } from "../types";
-import { code, diffMinutes } from "../lib/time";
+import { code, diffMinutes, isWholeHours } from "../lib/time";
 import { canVoid, validateAllocations } from "./ledger";
-import { canManageArea } from "./auth";
+import { canRegisterOvertime, canReviewRequestsFor } from "./auth";
 
 const id = z
   .string()
@@ -19,20 +19,28 @@ const date = z
     return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === d && d >= "0100-01-01";
   }, "Fecha inválida");
 const schedule = { date, start: time, end: time, reason: note };
+const wholeSchedule = (s: { start: string; end: string }) =>
+  isWholeHours(diffMinutes(s.start, s.end));
 export const commandSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("addOvertime"), ...schedule }).strict(),
+  z
+    .object({ action: z.literal("addOvertime"), ...schedule })
+    .strict()
+    .refine(wholeSchedule, "Solo se permiten horas completas."),
   z
     .object({
       action: z.literal("requestCompensation"),
       ...schedule,
       allocations: z
         .array(
-          z.object({ overtimeId: id, minutes: z.number().int().positive().max(1440) }).strict(),
+          z
+            .object({ overtimeId: id, minutes: z.number().int().min(60).max(1440).multipleOf(60) })
+            .strict(),
         )
         .min(1)
         .max(50),
     })
-    .strict(),
+    .strict()
+    .refine(wholeSchedule, "Solo se permiten horas completas."),
   z.object({ action: z.literal("reviewOvertime"), id, approve: z.boolean(), note }).strict(),
   z.object({ action: z.literal("voidOvertime"), id, note }).strict(),
   z.object({ action: z.literal("reviewCompensation"), id, approve: z.boolean(), note }).strict(),
@@ -91,16 +99,19 @@ export function transition(
   now: string,
 ): Overtime | Compensation {
   requireThat(
-    actor.active && worker.active && worker.role === "trabajador",
+    actor.active && canRegisterOvertime(worker),
     "Usuario inactivo o trabajador inválido.",
   );
   const c = command;
-  const own = actor.id === worker.id && actor.role === "trabajador";
-  const manager = actor.id !== worker.id && canManageArea(actor, worker.area);
+  const own = actor.id === worker.id && canRegisterOvertime(actor);
+  const manager = canReviewRequestsFor(actor, worker);
   if (c.action === "addOvertime" || c.action === "requestCompensation") {
     requireThat(own, "Solo puedes registrar solicitudes propias.");
     const minutes = diffMinutes(c.start, c.end);
-    requireThat(minutes > 0 && minutes <= 1440, "Duración inválida.");
+    requireThat(
+      isWholeHours(minutes) && minutes <= 1440,
+      "Solo se permiten horas completas, con un mínimo de 1 hora.",
+    );
     if (c.action === "addOvertime") {
       requireThat(
         !ots.some((o) => ["activo", "pendiente", "aprobada"].includes(o.status) && overlaps(c, o)),
@@ -120,7 +131,7 @@ export function transition(
       !comps.some((x) => reservingStatuses.includes(x.status) && overlaps(c, x)),
       "El descanso se superpone con otra compensación.",
     );
-    const err = validateAllocations(worker.id, minutes, c.allocations, ots, comps);
+    const err = validateAllocations(worker.id, minutes, c.allocations, ots, comps, true);
     requireThat(!err, err || "Asignación inválida.");
     requireThat(
       !ots.some((o) => c.allocations.some((a) => a.overtimeId === o.id) && o.date === c.date),

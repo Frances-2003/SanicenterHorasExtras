@@ -6,8 +6,9 @@ import { AppShell, Empty } from "@/components/app/AppShell";
 import { Pager, StatusBadge, paginate } from "@/components/app/ui";
 import { addOvertimeFirestore, useCurrentUser, useStore } from "@/services/store";
 import { availableFor } from "@/services/ledger";
-import { diffMinutes, fmtDate, fmtMin } from "@/lib/time";
+import { diffMinutes, fmtDate, fmtMin, HOUR_OPTIONS, isWholeHours } from "@/lib/time";
 import { WorkflowActions } from "@/components/app/WorkflowActions";
+import { canRegisterOvertime } from "@/services/auth";
 
 export const Route = createFileRoute("/horas")({
   head: () => ({
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/horas")({
       { property: "og:title", content: "Horas extras — Sani Center Horas Extras" },
       {
         property: "og:description",
-        content: "Registro de horas extras con cálculo automático y minutos enteros.",
+        content: "Registro de horas extras con cálculo automático en horas completas.",
       },
     ],
   }),
@@ -39,6 +40,9 @@ function Horas() {
   const user = useCurrentUser();
   const { overtime, comps, users } = useStore();
   const isWorker = user?.role === "trabajador";
+  const isManager = user?.role === "jefe" || user?.role === "admin";
+  const [scope, setScope] = useState<"personal" | "equipo">("personal");
+  const isPersonal = isWorker || (user?.role === "jefe" && scope === "personal");
   const [form, setForm] = useState({ date: "", start: "18:00", end: "20:00", reason: "" });
   const [f, setF] = useState({ date: "", month: "", code: "", worker: "" });
   const [page, setPage] = useState(1);
@@ -49,7 +53,9 @@ function Horas() {
   const rows = useMemo(
     () =>
       overtime
-        .filter((o) => (isWorker ? o.workerId === user?.id : !f.worker || o.workerId === f.worker))
+        .filter((o) =>
+          isPersonal ? o.workerId === user?.id : !f.worker || o.workerId === f.worker,
+        )
         .filter(
           (o) =>
             (!f.date || o.date === f.date) &&
@@ -57,7 +63,7 @@ function Horas() {
             (!f.code || o.code.toLowerCase().includes(f.code.toLowerCase())),
         )
         .sort((a, b) => b.date.localeCompare(a.date) || b.code.localeCompare(a.code)),
-    [overtime, f, isWorker, user],
+    [overtime, f, isPersonal, user],
   );
 
   if (!user) return <AppShell title="">{null}</AppShell>;
@@ -70,8 +76,8 @@ function Horas() {
       toast.error("Selecciona la fecha de realización de las horas extras.");
       return;
     }
-    if (minutes <= 0) {
-      toast.error("La hora inicial y final no pueden ser iguales; la duración debe ser mayor a 0.");
+    if (!isWholeHours(minutes)) {
+      toast.error("Selecciona una duración en horas completas, con un mínimo de 1 hora.");
       return;
     }
     if (!form.reason.trim()) {
@@ -97,14 +103,33 @@ function Horas() {
 
   return (
     <AppShell
-      title={isWorker ? "Mis horas extras" : "Horas extras del equipo"}
+      title={isPersonal ? "Mis horas extras" : "Horas extras del equipo"}
       subtitle={
-        isWorker
-          ? "Las solicitudes quedan pendientes hasta que el jefe las apruebe."
+        isPersonal
+          ? "Las solicitudes quedan pendientes hasta su revisión y aprobación."
           : "Consulta las solicitudes de horas extras del equipo."
       }
     >
-      {isWorker && (
+      {user.role === "jefe" && (
+        <div className="mb-5 flex gap-2" role="group" aria-label="Ámbito de horas extras">
+          {(["personal", "equipo"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={scope === value}
+              className={scope === value ? "btn-primary" : "btn-ghost"}
+              onClick={() => {
+                setScope(value);
+                setF({ date: "", month: "", code: "", worker: "" });
+                setPage(1);
+              }}
+            >
+              {value === "personal" ? "Mis horas extras" : "Horas extras del equipo"}
+            </button>
+          ))}
+        </div>
+      )}
+      {canRegisterOvertime(user) && isPersonal && (
         <form onSubmit={submit} className="card mb-6 grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <label className="field-label">Código</label>
@@ -118,6 +143,7 @@ function Horas() {
             <label className="field-label">Fecha de realización</label>
             <input
               type="date"
+              aria-label="Fecha de realización"
               required
               className="field"
               value={form.date}
@@ -126,23 +152,35 @@ function Horas() {
           </div>
           <div>
             <label className="field-label">Hora de inicio</label>
-            <input
-              type="time"
+            <select
+              aria-label="Hora de inicio"
               required
               className="field"
               value={form.start}
               onChange={(e) => setForm({ ...form, start: e.target.value })}
-            />
+            >
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hour}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="field-label">Hora de fin</label>
-            <input
-              type="time"
+            <select
+              aria-label="Hora de fin"
               required
               className="field"
               value={form.end}
               onChange={(e) => setForm({ ...form, end: e.target.value })}
-            />
+            >
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hour}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="field-label">Duración calculada</label>
@@ -157,6 +195,7 @@ function Horas() {
             <label className="field-label">Motivo obligatorio *</label>
             <input
               list="reasons"
+              aria-label="Motivo de las horas extras"
               required
               className="field"
               placeholder="Ej. Inventario general, validación de stock..."
@@ -172,7 +211,7 @@ function Horas() {
           <div className="flex items-end">
             <button
               type="submit"
-              disabled={isSubmitting || minutes <= 0}
+              disabled={isSubmitting || !isWholeHours(minutes)}
               className="btn-primary w-full disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
@@ -184,7 +223,7 @@ function Horas() {
 
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-end gap-3 border-b border-border p-4">
-          {!isWorker && (
+          {!isPersonal && (
             <div>
               <label className="field-label">Trabajador</label>
               <select
@@ -197,7 +236,7 @@ function Horas() {
               >
                 <option value="">Todos los trabajadores</option>
                 {users
-                  .filter((u) => u.role === "trabajador")
+                  .filter((u) => u.role === "trabajador" || u.role === "jefe")
                   .map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
@@ -266,14 +305,14 @@ function Horas() {
               <thead className="bg-muted">
                 <tr>
                   <th className="th">Código</th>
-                  {!isWorker && <th className="th">Trabajador</th>}
+                  {!isPersonal && <th className="th">Trabajador</th>}
                   <th className="th">Fecha</th>
                   <th className="th">Horario</th>
                   <th className="th">Duración</th>
                   <th className="th">Saldo restante</th>
                   <th className="th">Motivo</th>
                   <th className="th">Estado</th>
-                  {!isWorker && <th className="th">Acciones</th>}
+                  {isManager && <th className="th">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -283,7 +322,7 @@ function Horas() {
                     className={o.status === "anulada" ? "text-muted-foreground opacity-60" : ""}
                   >
                     <td className="td font-mono text-xs">{o.code}</td>
-                    {!isWorker && <td className="td font-medium">{nameOf(o.workerId)}</td>}
+                    {!isPersonal && <td className="td font-medium">{nameOf(o.workerId)}</td>}
                     <td className="td">{fmtDate(o.date)}</td>
                     <td className="td whitespace-nowrap">
                       {o.start} – {o.end}
@@ -306,7 +345,7 @@ function Horas() {
                         <div className="text-xs text-muted-foreground">{o.reviewNote}</div>
                       )}
                     </td>
-                    {!isWorker && (
+                    {isManager && (
                       <td className="td">
                         <WorkflowActions record={o} manager overtime />
                       </td>

@@ -28,7 +28,9 @@ export function dashboardOf(
   const allowed = canViewTeamRecords(actor);
   const personnel =
     allowed && actor
-      ? users.filter((u) => u.role === "trabajador" && canManageArea(actor, u.area))
+      ? users.filter(
+          (u) => (u.role === "trabajador" || u.role === "jefe") && canManageArea(actor, u.area),
+        )
       : [];
   const areas = [...new Set(personnel.map((u) => u.area))].sort();
   const workers = personnel.filter((u) => !filters.area || u.area === filters.area);

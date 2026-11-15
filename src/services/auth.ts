@@ -35,11 +35,20 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export function canRegisterOvertime(user: User | null): boolean {
-  return !!user && user.active && user.role === "trabajador";
+  return !!user && user.active && (user.role === "trabajador" || user.role === "jefe");
 }
 
 export function canRequestCompensation(user: User | null): boolean {
-  return !!user && user.active && user.role === "trabajador";
+  return canRegisterOvertime(user);
+}
+
+/** A manager may review their own requests only when their role is jefe. */
+export function canReviewRequestsFor(actor: User, worker: User): boolean {
+  return (
+    canRegisterOvertime(worker) &&
+    canManageArea(actor, worker.area) &&
+    (actor.id !== worker.id || actor.role === "jefe")
+  );
 }
 
 export function canReviewCompensation(user: User | null): boolean {
@@ -63,7 +72,7 @@ export function hasRouteAccess(role: Role, route: string): boolean {
     case "/horas":
       return true; // Todos acceden, la vista se adapta según el rol
     case "/compensaciones":
-      return role === "trabajador";
+      return role === "trabajador" || role === "jefe";
     case "/solicitudes":
     case "/dashboard":
       return role === "jefe" || role === "admin";

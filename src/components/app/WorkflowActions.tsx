@@ -17,10 +17,12 @@ export function WorkflowActions({
   record,
   manager,
   overtime = false,
+  owner = false,
 }: {
   record: Overtime | Compensation;
   manager: boolean;
   overtime?: boolean;
+  owner?: boolean;
 }) {
   const [chosen, setChosen] = useState<{
     label: string;
@@ -43,7 +45,7 @@ export function WorkflowActions({
   }
   if (overtime && manager && record.status === "aprobada")
     actions.push({ label: "Anular", run: (note) => voidOvertime(record.id, note) });
-  if (!overtime && !manager && record.status === "aprobada" && beforeStart)
+  if (!overtime && (!manager || owner) && record.status === "aprobada" && beforeStart)
     actions.push({
       label: "Solicitar anulación",
       run: (note) => requestCancellation(record.id, note),

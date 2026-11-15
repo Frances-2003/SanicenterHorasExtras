@@ -4,6 +4,8 @@ Esta es la guía vigente. El código se entrega compilable para Netlify, con log
 
 ## Compilar
 
+La entrega actual permite solicitudes personales del jefe y su autoaprobación explícita en una revisión separada, manteniendo al trabajador sin autoaprobación y el ámbito de Inventario para JPAREDES. Todas las solicitudes y asignaciones nuevas utilizan horas completas; el historial no se redondea ni se migra. Se retiró el PNG de marca y se muestra solo «Horas Extras». Estos cambios no requieren nuevas reglas ni índices: las lecturas propias ya están permitidas y las escrituras de navegador siguen denegadas. Se debe actualizar conjuntamente el frontend y la función `workflow`.
+
 Usar Node 24 y ejecutar desde la carpeta del proyecto:
 
 ```powershell
@@ -170,3 +172,14 @@ Verificación local de cierre: pruebas de aplicación aprobadas; 13 comprobacion
 Login local conservado: `npm.cmd run dev` → http://localhost:8081, sanicenterdb y operaciones financieras bloqueadas. No requiere desplegar ni activar el backend. La contraseña real no fue utilizada en las pruebas.
 
 Referencias: [CLI build](https://cli.netlify.com/commands/build/), [CLI deploy](https://cli.netlify.com/commands/deploy/), [creación sin Git](https://cli.netlify.com/commands/sites/), [variables del runtime](https://docs.netlify.com/build/functions/environment-variables/).
+
+## Archivos de la entrega: jefe, horas completas e identidad textual
+
+- Autorización, transiciones y saldos: `src/services/auth.ts`, `src/services/workflow.ts`, `src/services/ledger.ts`, `src/services/dashboard.ts`, `server/workflow-store.ts`.
+- Formularios, historial y resumen: `src/routes/horas.tsx`, `src/routes/compensaciones.tsx`, `src/routes/resumen.tsx`, `src/components/app/WorkflowActions.tsx`, `src/lib/time.ts`.
+- Identidad textual y metadatos: `src/components/app/AppShell.tsx`, `src/routes/index.tsx`, `src/routes/__root.tsx`; se retiró exclusivamente `public/logo.png`.
+- Alcance de la entrada local: `scripts/netlify-real.ts` incluye a JPAREDES como solicitante, manteniendo los mismos dos actores y la misma restricción por área.
+- Pruebas: `src/services/personal-hours.test.ts` (nuevo), `security/firestore.test.ts`, `e2e/workflow.spec.ts`.
+- Documentación vigente: este archivo, `FIREBASE_WORKFLOW.md`, `JEFE_PRODUCCION.md`, `ops/BACKEND_REAL.md`.
+
+La entrega no modifica `firestore.rules`, índices, datos, perfiles, credenciales ni contadores reales. No requiere volver a publicar reglas. Para actualizar la aplicación, crear el commit y publicar conjuntamente frontend y las dos funciones con el procedimiento manual anterior, conservando las variables de entorno autorizadas. No ejecutar migraciones ni reinicializaciones. Los documentos anteriores a esta entrega que describen prohibición general de autoaprobación quedan sujetos a la excepción explícita del rol jefe descrita aquí; el trabajador continúa sin autoaprobación.

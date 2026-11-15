@@ -38,7 +38,9 @@ function Resumen() {
 
   const isWorker = user?.role === "trabajador";
   const workers = users.filter(
-    (u) => u.role === "trabajador" && (isWorker ? u.id === user?.id : !worker || u.id === worker),
+    (u) =>
+      (u.role === "trabajador" || u.role === "jefe") &&
+      (isWorker ? u.id === user?.id : !worker || u.id === worker),
   );
 
   // Separate monthly movements from historical balance
@@ -120,7 +122,7 @@ function Resumen() {
             <select className="field" value={worker} onChange={(e) => setWorker(e.target.value)}>
               <option value="">Todo el equipo</option>
               {users
-                .filter((u) => u.role === "trabajador")
+                .filter((u) => u.role === "trabajador" || u.role === "jefe")
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}

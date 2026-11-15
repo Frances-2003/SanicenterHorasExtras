@@ -1,4 +1,5 @@
 import type { Allocation, Balance, Compensation, MonthlyMovement, Overtime } from "../types";
+import { isWholeHours } from "../lib/time";
 
 /**
  * Pure balance & ledger rules — independent of storage so Firestore / Firebase
@@ -105,7 +106,10 @@ export function validateAllocations(
   allocs: Allocation[],
   ots: Overtime[],
   comps: Compensation[],
+  wholeHoursOnly = false,
 ): string | null {
+  if (wholeHoursOnly && (!isWholeHours(total) || allocs.some((a) => !isWholeHours(a.minutes))))
+    return "La duración y cada asignación deben ser horas completas, con un mínimo de 1 hora.";
   if (!Number.isSafeInteger(total) || total <= 0)
     return "Indica un horario de descanso válido con duración mayor a 0 minutos.";
   if (allocs.some((a) => !Number.isInteger(a.minutes) || a.minutes <= 0)) {
