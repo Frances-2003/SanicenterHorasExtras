@@ -1,5 +1,25 @@
 import type { Role, User } from "../types";
 
+/** Reject malformed/inactive Firestore profiles before any trusted transaction writes. */
+export function isActiveWorkflowProfile(value: unknown): value is User {
+  if (!value || typeof value !== "object") return false;
+  const user = value as Record<string, unknown>;
+  const text = (field: string) => typeof user[field] === "string" && user[field].trim().length > 0;
+  return (
+    user["active"] === true &&
+    typeof user["role"] === "string" &&
+    ["trabajador", "jefe", "admin"].includes(user["role"]) &&
+    text("id") &&
+    text("name") &&
+    text("area") &&
+    (user["authorizedAreas"] === undefined ||
+      (Array.isArray(user["authorizedAreas"]) &&
+        user["authorizedAreas"].every(
+          (area) => typeof area === "string" && area.trim().length > 0,
+        )))
+  );
+}
+
 /** Primary area remains authorized; optional additional areas support existing profiles. */
 export function authorizedAreasOf(user: User): string[] {
   const additional = Array.isArray(user.authorizedAreas) ? user.authorizedAreas : [];

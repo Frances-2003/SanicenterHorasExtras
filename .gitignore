@@ -27,6 +27,7 @@ service-account*.json
 *service_account*.json
 credentials*.json
 sanicenter-workflow.json
+sanicenter-workflow-*.json
 *.pem
 *.key
 *.p12

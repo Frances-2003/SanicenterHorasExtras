@@ -1,7 +1,7 @@
 import { getAuth } from "firebase-admin/auth";
 import { execute } from "./workflow-store";
 import { WorkflowError } from "../src/services/workflow";
-import { initializeRuntime, PolicyError, requirePilotAccess, runtimePolicy } from "./runtime";
+import { initializeRuntime, PolicyError, requireWorkflowAccess, runtimePolicy } from "./runtime";
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
@@ -79,10 +79,10 @@ export async function handleWorkflow(request: Request): Promise<Response> {
     } catch {
       return json({ ok: false, error: "Sesión inválida o revocada." }, 401, cors);
     }
-    requirePilotAccess(uid);
+    requireWorkflowAccess();
     return json(
       await execute(uid, id, body, {
-        authorizeWorker: (workerId) => requirePilotAccess(uid, workerId),
+        authorizeWorker: () => requireWorkflowAccess(),
         enforceRateLimit: true,
       }),
       200,

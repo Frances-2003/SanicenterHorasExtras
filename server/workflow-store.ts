@@ -2,7 +2,12 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { commandSchema, transition, WorkflowError, type Command } from "../src/services/workflow";
 import type { Compensation, Overtime, User } from "../src/types";
-import { canManageArea, canRegisterOvertime, canReviewRequestsFor } from "../src/services/auth";
+import {
+  canManageArea,
+  canRegisterOvertime,
+  canReviewRequestsFor,
+  isActiveWorkflowProfile,
+} from "../src/services/auth";
 import { PolicyError } from "./runtime";
 
 /** All database mutations are centralized here, behind store.ts's authenticated API. */
@@ -36,8 +41,8 @@ export async function execute(
     async (tx) => {
       const actorSnap = await tx.get(db.doc(`users/${uid}`));
       const actor = { ...actorSnap.data(), id: uid } as User;
-      if (!actorSnap.exists || actor.active !== true)
-        throw new WorkflowError("Perfil inactivo o inexistente.");
+      if (!actorSnap.exists || !isActiveWorkflowProfile(actor))
+        throw new WorkflowError("Perfil inactivo, inválido o inexistente.");
       const replay = await tx.get(auditRef);
       if (replay.exists) {
         options?.authorizeWorker(replay.get("workerId"));
@@ -49,13 +54,21 @@ export async function execute(
       if (creates && recordSnap.exists) throw new WorkflowError("Registro ya existente.");
       if (!creates && !recordSnap.exists) throw new WorkflowError("Registro no encontrado.");
       const workerId = creates ? uid : recordSnap.get("workerId");
-      if (typeof workerId !== "string" || !/^[\w-]{1,128}$/.test(workerId))
+      // Firebase UIDs are not restricted to letters/digits; require a single safe document ID.
+      if (
+        typeof workerId !== "string" ||
+        workerId.length < 1 ||
+        workerId.length > 128 ||
+        workerId.includes("/") ||
+        workerId === "." ||
+        workerId === ".."
+      )
         throw new WorkflowError("Trabajador inválido.");
       options?.authorizeWorker(workerId);
       const workerSnap = await tx.get(db.doc(`users/${workerId}`));
       const worker = { ...workerSnap.data(), id: workerId } as User;
-      if (!workerSnap.exists || !canRegisterOvertime(worker))
-        throw new WorkflowError("Trabajador inactivo o inexistente.");
+      if (!workerSnap.exists || !isActiveWorkflowProfile(worker) || !canRegisterOvertime(worker))
+        throw new WorkflowError("Trabajador inactivo, inválido o inexistente.");
       const own = uid === workerId && canRegisterOvertime(actor);
       const manager = canReviewRequestsFor(actor, worker);
       if (!own && !manager) throw new WorkflowError("No tienes acceso a este trabajador.");

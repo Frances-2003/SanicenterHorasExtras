@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runtimePolicy, requirePilotAccess } from "../server/runtime";
+import { runtimePolicy, requireWorkflowAccess } from "../server/runtime";
 import workflow, { config } from "../netlify/functions/workflow";
 const production = {
   WORKFLOW_PRODUCTION_ENABLED: "true",
@@ -23,17 +23,21 @@ describe("Netlify activation safety", () => {
       "HTTPS",
     );
   });
-  it("limits pilots by both actor and worker without granting business permissions", () => {
+  it("enables general operation without UID lists and rejects the obsolete pilot mode", () => {
     const env = {
       ...production,
-      WORKFLOW_WRITE_MODE: "pilot",
-      WORKFLOW_ALLOWED_ACTOR_UIDS: "boss,worker",
-      WORKFLOW_ALLOWED_WORKER_UIDS: "worker",
+      WORKFLOW_WRITE_MODE: "enabled",
     };
-    expect(() => requirePilotAccess("boss", "worker", env)).not.toThrow();
-    expect(() => requirePilotAccess("other", "worker", env)).toThrow("piloto");
-    expect(() => requirePilotAccess("boss", "outside", env)).toThrow("piloto");
-    expect(() => requirePilotAccess("boss", undefined, production)).toThrow("deshabilitadas");
+    expect(() => requireWorkflowAccess(env)).not.toThrow();
+    expect(() =>
+      requireWorkflowAccess({
+        ...env,
+        WORKFLOW_ALLOWED_ACTOR_UIDS: "old-user-only",
+        WORKFLOW_ALLOWED_WORKER_UIDS: "old-user-only",
+      }),
+    ).not.toThrow();
+    expect(() => requireWorkflowAccess(production)).toThrow("deshabilitadas");
+    expect(() => runtimePolicy({ ...env, WORKFLOW_WRITE_MODE: "pilot" })).toThrow("pilot");
   });
   it("the native function responds closed before loading credentials or accessing Firebase", async () => {
     vi.stubEnv("WORKFLOW_EMULATOR_MODE", "0");

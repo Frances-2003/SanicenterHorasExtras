@@ -40,45 +40,42 @@ export function runtimePolicy(env: NodeJS.ProcessEnv = process.env) {
     throw new PolicyError("Configura APP_ORIGIN con el origen HTTPS exacto.");
   }
   const writeMode = env["WORKFLOW_WRITE_MODE"] || "disabled";
-  if (!["disabled", "pilot", "enabled"].includes(writeMode))
-    throw new PolicyError("Modo de escritura inválido.");
-  if (localReal && writeMode !== "pilot" && writeMode !== "disabled")
-    throw new PolicyError("La ejecución local real requiere alcance limitado por UID.");
-  const list = (key: string) =>
-    (env[key] || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+  if (!["disabled", "enabled"].includes(writeMode))
+    throw new PolicyError(
+      "Modo de escritura inválido: usa disabled o enabled. El modo pilot ya no se admite.",
+    );
   return {
     local: false,
-    writeMode: writeMode as "disabled" | "pilot" | "enabled",
+    writeMode: writeMode as "disabled" | "enabled",
     origin,
-    actors: list("WORKFLOW_ALLOWED_ACTOR_UIDS"),
-    workers: list("WORKFLOW_ALLOWED_WORKER_UIDS"),
   };
 }
-export function requirePilotAccess(
-  actorId: string,
-  workerId?: string,
-  env: NodeJS.ProcessEnv = process.env,
-) {
+/** Deployment switch only. Identity, active profile, role and area are checked by the endpoint/transaction. */
+export function requireWorkflowAccess(env: NodeJS.ProcessEnv = process.env) {
   const policy = runtimePolicy(env);
   if (policy.writeMode === "disabled")
     throw new PolicyError("Las escrituras están deshabilitadas.");
-  if (
-    policy.writeMode === "pilot" &&
-    (!policy.actors.includes(actorId) ||
-      (workerId !== undefined && !policy.workers.includes(workerId)))
-  )
-    throw new PolicyError("Operación fuera del alcance del piloto.", 403);
+}
+export const WORKFLOW_SERVICE_ACCOUNT = "sanicenter-workflow@sanicenterdb.iam.gserviceaccount.com";
+export function isWorkflowServiceAccount(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const account = value as Record<string, unknown>;
+  return (
+    account["type"] === "service_account" &&
+    account["project_id"] === "sanicenterdb" &&
+    account["client_email"] === WORKFLOW_SERVICE_ACCOUNT &&
+    typeof account["private_key_id"] === "string" &&
+    account["private_key_id"].trim().length > 0 &&
+    typeof account["private_key"] === "string" &&
+    account["private_key"].trim().length > 0
+  );
 }
 export async function initializeRuntime() {
   const policy = runtimePolicy();
   if (!getApps().length) {
     try {
       const secret = JSON.parse(process.env["FIREBASE_SERVICE_ACCOUNT_JSON"] || "{}");
-      if (secret.project_id !== "sanicenterdb" || !secret.client_email || !secret.private_key)
-        throw new Error();
+      if (!isWorkflowServiceAccount(secret)) throw new Error();
       initializeApp({ projectId: "sanicenterdb", credential: cert(secret) });
     } catch {
       throw new PolicyError("Credencial exclusiva del servidor ausente o inválida.");

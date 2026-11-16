@@ -21,7 +21,8 @@
     "build:netlify": "node scripts/build-netlify.mjs",
     "backup:firestore": "tsx scripts/backup-firestore.ts",
     "counter:prepare": "tsx scripts/prepare-compensation-counter.ts",
-    "test:netlify": "tsx scripts/test-netlify-local.ts"
+    "test:netlify": "tsx scripts/test-netlify-local.ts",
+    "test:workflow-package": "node scripts/check-workflow-package.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1",
@@ -102,6 +103,7 @@
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
+    "fflate": "0.8.3",
     "firebase-tools": "^15.35.0",
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",

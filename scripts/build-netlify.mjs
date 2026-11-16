@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
-import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { build } from "esbuild";
 import { loadEnv } from "vite";
 import { zipFunctions } from "@netlify/zip-it-and-ship-it";
+import { checkWorkflowPackage } from "./check-workflow-package.mjs";
 
 const publicEnv = loadEnv("production", process.cwd(), "VITE_");
 const preview = Boolean(process.env.CONTEXT && process.env.CONTEXT !== "production");
@@ -54,7 +54,12 @@ const compiled = await build({
   platform: "node",
   target: "node24",
   format: "esm",
-  packages: "external",
+  // Netlify V2 uses NFT tracing even when node_bundler is esbuild. Resolve the
+  // CJS jwks-rsa -> ESM jose boundary here, before NFT copies dependencies.
+  external: ["@google-cloud/firestore", "@google-cloud/firestore-api"],
+  // Bundled Admin uses a generated __require helper. A static import lets NFT
+  // trace Firestore and ship its on-disk gRPC/protobuf resources as well.
+  banner: { js: 'import "@google-cloud/firestore";' },
   metafile: true,
   plugins: [
     {
@@ -79,15 +84,11 @@ if (
   )
 )
   throw new Error("El paquete de producción incluye un runtime de emuladores.");
-process.env.WORKFLOW_EMULATOR_MODE = "0";
-process.env.WORKFLOW_PRODUCTION_ENABLED = "false";
-const { default: workflow, config } = await import(pathToFileURL(resolve(prepared)).href);
-const closed = await workflow(
-  new Request("https://local.invalid/api/workflow", { method: "POST", body: "{}" }),
-  { deploy: { context: "production" } },
-);
-if (config.path !== "/api/workflow" || closed.status !== 503)
-  throw new Error("Falló la comprobación del paquete cerrado.");
+if (
+  !Object.keys(compiled.metafile.inputs).some((p) => p.includes("node_modules/jwks-rsa/")) ||
+  !Object.keys(compiled.metafile.inputs).some((p) => p.includes("node_modules/jose/"))
+)
+  throw new Error("La autenticación debe incluir jwks-rsa y jose en el bundle de producción.");
 function checkPublic(dir) {
   for (const file of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, file.name);
@@ -121,7 +122,6 @@ const archives = await zipFunctions(
       workflow: {
         nodeBundler: "esbuild",
         externalNodeModules: [
-          "firebase-admin",
           "@google-cloud/firestore",
           "@google-cloud/firestore-api",
         ],
@@ -143,6 +143,8 @@ if (
   !packaged.some((f) => f.name === "server")
 )
   throw new Error("Faltan funciones o rutas en el manifiesto publicable.");
+const packageCheck = checkWorkflowPackage(archives.find((f) => f.name === "workflow").path);
+console.log("Workflow: ZIP aislado, sin require(esm), sin red ni credenciales:", packageCheck);
 const sha = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
 const report = {
   generatedAt: new Date().toISOString(),
@@ -152,6 +154,7 @@ const report = {
   backendActivation: "requires-authorized-runtime-settings",
   productionRuntimeHasEmulatorDependencies: false,
   demonstrationDataIncluded: false,
+  workflowPackageCheck: packageCheck,
   firestoreRulesSha256: sha("firestore.rules"),
   firestoreIndexesSha256: sha("firestore.indexes.json"),
   functions: archives.map((f) => ({

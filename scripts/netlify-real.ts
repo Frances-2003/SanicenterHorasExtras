@@ -7,16 +7,18 @@ const args = process.argv.slice(2);
 const real = args.includes("--start-real");
 if (args.includes("--check")) {
   console.log(
-    "sanicenterdb | Netlify Dev http://localhost:8888 | inicio real requiere credencial externa y --authorize-real-writes | alcance JBERNALES/JPAREDES",
+    "sanicenterdb | Netlify Dev http://localhost:8888 | inicio general requiere credencial rotada y --authorize-general-writes | perfiles activos, roles y áreas; sin listas UID",
   );
   process.exit(0);
 }
 if (!real && !args.includes("--locked"))
   throw new Error(
-    "Usa --check, --locked o --start-real --authorize-real-writes --credential-file RUTA_EXTERNA.",
+    "Usa --check, --locked o --start-real --authorize-general-writes --credential-file RUTA_EXTERNA.",
   );
-if (real && !args.includes("--authorize-real-writes"))
-  throw new Error("Se requiere autorización explícita de escrituras reales.");
+if (real && !args.includes("--authorize-general-writes"))
+  throw new Error(
+    "La activación general requiere autorización explícita y --authorize-general-writes. El antiguo permiso del piloto no se reutiliza.",
+  );
 for (const key of ["FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST"])
   if (process.env[key]) throw new Error("No mezclar emuladores con el backend real.");
 const clean: NodeJS.ProcessEnv = { ...process.env };
@@ -26,6 +28,8 @@ for (const key of [
   "WORKFLOW_EMULATOR_MODE",
   "WORKFLOW_LOCAL_REAL_ENABLED",
   "NETLIFY_DEV",
+  "WORKFLOW_ALLOWED_ACTOR_UIDS",
+  "WORKFLOW_ALLOWED_WORKER_UIDS",
 ])
   delete clean[key];
 Object.assign(clean, {
@@ -73,9 +77,7 @@ const env: NodeJS.ProcessEnv = {
   APP_ORIGIN: "http://localhost:8888",
   WORKFLOW_LOCAL_REAL_ENABLED: "true",
   WORKFLOW_PRODUCTION_ENABLED: String(real),
-  WORKFLOW_WRITE_MODE: real ? "pilot" : "disabled",
-  WORKFLOW_ALLOWED_ACTOR_UIDS: "C38Dt66KTGfhbuWeQxJ3KBhpUrI2,FN4okTXow4hI44MH8gBNBXymLW72",
-  WORKFLOW_ALLOWED_WORKER_UIDS: "C38Dt66KTGfhbuWeQxJ3KBhpUrI2,FN4okTXow4hI44MH8gBNBXymLW72",
+  WORKFLOW_WRITE_MODE: real ? "enabled" : "disabled",
   BROWSER: "none",
   NODE_OPTIONS: "--experimental-require-module",
 };
@@ -90,7 +92,7 @@ const npmCli = process.env["npm_execpath"];
 if (!npmCli) throw new Error("Iniciar mediante npm.cmd run netlify:real.");
 console.log(
   real
-    ? "Operaciones REALES autorizadas: JBERNALES y JPAREDES. http://localhost:8888"
+    ? "Operaciones REALES autorizadas para perfiles activos según rol y área. http://localhost:8888"
     : "Backend bloqueado, sin credenciales: http://localhost:8888",
 );
 const child = spawn(

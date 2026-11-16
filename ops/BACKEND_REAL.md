@@ -1,18 +1,18 @@
-# Backend real: activación local autorizada
+# Backend real: preparación general sin listas UID
 
-La identidad, el rol personalizado exacto y su asignación IAM ya se crearon con autorización del propietario. La clave se guardó fuera del repositorio con acceso únicamente para el propietario Windows y SYSTEM. Se verificaron con esa identidad la lectura y consulta de Firestore, una transacción de solo lectura y la consulta de Authentication. No repetir la creación de identidad, rol o clave.
+La identidad, el rol personalizado y su asignación IAM ya existen. Se mantienen. La clave anterior fue declarada expuesta y no debe reutilizarse: preparar su sustitución y revocación según [PRODUCCION_GENERAL.md](PRODUCCION_GENERAL.md). No se ha rotado la clave ni se ha autorizado la nueva activación general.
 
-Estas son las operaciones autorizadas y completadas para la activación local:
+Antecedentes de configuración, sin repetir ni ejecutar ahora:
 
 1. Crear la identidad `sanicenter-workflow@sanicenterdb.iam.gserviceaccount.com`.
 2. Crear el rol personalizado `projects/sanicenterdb/roles/sanicenterWorkflow` con los seis permisos exactos de `workflow-runtime-role.json` y asignarlo únicamente a esa identidad, conservando las demás asignaciones IAM mediante su etag. No asignar Owner, Editor ni permisos para gestionar usuarios, reglas, IAM, borrados o facturación.
-3. Crear una clave privada de esa identidad y guardarla únicamente en `C:\Users\JULIO B\SaniCenter-Secrets\sanicenter-workflow.json`, fuera del repositorio, con ACL restringida al propietario Windows y SYSTEM. No mostrarla ni incluirla en logs, VITE_*, Git o archivos públicos. Su copia futura a Netlify se realiza mediante la configuración privada de Functions.
-4. Autorizar la ejecución local con escrituras reales limitadas por UID a JBERNALES y JPAREDES como solicitantes, y JPAREDES como jefe de Inventario. La excepción autorizada permite a JPAREDES revisar sus propias solicitudes en una operación separada. No concede autoaprobación a JBERNALES ni áreas adicionales al jefe. Las operaciones crean registros reales, avanzan contadores y conservan auditoría; no son una demo ni se eliminan automáticamente. No se ejecutan solicitudes financieras automáticamente al iniciar el servidor.
+3. La futura clave de reemplazo debe guardarse en un archivo nuevo fuera del repositorio, con ACL restringida al propietario Windows y SYSTEM. No mostrarla ni incluirla en logs, VITE_*, Git o archivos públicos. Su copia a Netlify necesita autorización y configuración privada de Functions.
+4. El launcher ya no utiliza UID fijos ni modo `pilot`. Al autorizar su inicio real, permite a todos los perfiles activos válidos operar por rol/área con modo `enabled`, incluidos los usuarios futuros. No concede autoaprobación al trabajador ni áreas adicionales a JPAREDES. Las operaciones crean registros reales y auditoría; no se eliminan automáticamente. Iniciar el servidor no crea solicitudes financieras.
 
-Para iniciar la activación local ya autorizada, ejecutar:
+Solo tras sustituir/revocar la clave comprometida y autorizar la activación general, iniciar:
 
 ```powershell
-npm.cmd run netlify:real -- --start-real --authorize-real-writes --credential-file "C:\Users\JULIO B\SaniCenter-Secrets\sanicenter-workflow.json"
+npm.cmd run netlify:real -- --start-real --authorize-general-writes --credential-file "C:\Users\JULIO B\SaniCenter-Secrets\sanicenter-workflow-rotada.json"
 ```
 
 Abrir `http://localhost:8888`. El launcher compila el frontend de producción sin entregarle la credencial y sirve las dos funciones mediante Netlify Dev offline. Offline impide operaciones de Netlify; Firebase usa la red real cuando el usuario inicia sesión o realiza operaciones. No publica el sitio. `npm.cmd run dev` continúa como login real con finanzas bloqueadas.

@@ -8,7 +8,9 @@
 [functions]
   directory = ".netlify/functions-prepared"
   node_bundler = "esbuild"
-  external_node_modules = ["firebase-admin", "@google-cloud/firestore", "@google-cloud/firestore-api"]
+  # Bundle Firebase Admin/Auth, including the CommonJS jwks-rsa -> ESM jose boundary.
+  # Firestore stays external because its gRPC/protobuf resources must remain on disk.
+  external_node_modules = ["@google-cloud/firestore", "@google-cloud/firestore-api"]
 
 [[headers]]
   for = "/*"

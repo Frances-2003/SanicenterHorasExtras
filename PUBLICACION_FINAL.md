@@ -4,6 +4,8 @@ Esta es la guía vigente. El código se entrega compilable para Netlify, con log
 
 ## Compilar
 
+**Producción general:** la guía específica de variables, altas futuras y rotación de la clave expuesta es [ops/PRODUCCION_GENERAL.md](ops/PRODUCCION_GENERAL.md). No usar el antiguo piloto ni la clave comprometida para activar esta entrega.
+
 La entrega actual permite solicitudes personales del jefe y su autoaprobación explícita en una revisión separada, manteniendo al trabajador sin autoaprobación y el ámbito de Inventario para JPAREDES. Todas las solicitudes y asignaciones nuevas utilizan horas completas; el historial no se redondea ni se migra. Se retiró el PNG de marca y se muestra solo «Horas Extras». Estos cambios no requieren nuevas reglas ni índices: las lecturas propias ya están permitidas y las escrituras de navegador siguen denegadas. Se debe actualizar conjuntamente el frontend y la función `workflow`.
 
 Usar Node 24 y ejecutar desde la carpeta del proyecto:
@@ -38,19 +40,17 @@ Configurar únicamente para el contexto **Production**. Las variables públicas 
 | VITE_FIREBASE_API_KEY / VITE_FIREBASE_APP_ID | Valores públicos de la aplicación web existente en Firebase Console     |
 | VITE_WORKFLOW_API_URL                        | Vacío: /api/workflow utiliza el mismo origen HTTPS                      |
 
-| Exclusivas del servidor       | Valor                                                                                     |
-| ----------------------------- | ----------------------------------------------------------------------------------------- |
-| GOOGLE_CLOUD_PROJECT          | sanicenterdb                                                                              |
-| APP_ORIGIN                    | https://TU_SITIO.netlify.app o dominio final exacto, sin barra final                      |
-| WORKFLOW_PRODUCTION_ENABLED   | false inicialmente; true solo al autorizar conexión del backend                           |
-| WORKFLOW_WRITE_MODE           | disabled inicialmente; pilot/enabled solo con autorización                                |
-| WORKFLOW_ALLOWED_ACTOR_UIDS   | Solo en pilot: UID reales autorizados, separados por coma                                 |
-| WORKFLOW_ALLOWED_WORKER_UIDS  | Solo en pilot: UID reales de trabajadores autorizados                                     |
-| FIREBASE_SERVICE_ACCOUNT_JSON | JSON privado de una identidad dedicada, introducido en la configuración segura de Netlify |
+| Exclusivas del servidor       | Valor                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| GOOGLE_CLOUD_PROJECT          | sanicenterdb                                                                                                                               |
+| APP_ORIGIN                    | https://TU_SITIO.netlify.app o dominio final exacto, sin barra final                                                                       |
+| WORKFLOW_PRODUCTION_ENABLED   | false inicialmente; true solo al autorizar conexión del backend                                                                            |
+| WORKFLOW_WRITE_MODE           | enabled para operación general; disabled para detener escrituras. El servicio sigue cerrado mientras WORKFLOW_PRODUCTION_ENABLED sea false |
+| FIREBASE_SERVICE_ACCOUNT_JSON | JSON privado de una identidad dedicada, introducido en la configuración segura de Netlify                                                  |
 
 Nunca poner la identidad en VITE_*, Git, dist, netlify.toml ni informes. No reutilizar la sesión personal de Firebase CLI para servir la aplicación. Limitar el secreto al scope Functions si el plan permite scopes; en Free puede estar disponible al build, por lo que deben restringirse colaboradores/plugins y evitarse logs de entorno. Cambiar variables de Functions exige **otro despliegue**. No configurar hosts de emuladores ni WORKFLOW_EMULATOR_MODE en Netlify.
 
-La identidad debe tener permisos mínimos de lectura/listado/creación/actualización de entidades Firestore y transacciones, más `firebaseauth.users.get` para comprobar revocación. No necesita borrar documentos, gestionar usuarios, contraseñas, reglas o IAM. Un rol personalizado debe validarse con el servicio real antes de abrir escrituras; no se concede Owner/Editor automáticamente. La creación de identidad/IAM y el registro del secreto son acciones reales pendientes de autorización.
+La identidad existente conserva sus permisos mínimos de lectura/listado/creación/actualización de entidades Firestore y transacciones, más `firebaseauth.users.get` para comprobar revocación. No necesita borrar documentos, gestionar usuarios, contraseñas, reglas o IAM. No recrear la identidad ni ampliar permisos. La clave declarada expuesta debe sustituirse y revocarse con autorización antes de activar producción. Mantener `FIREBASE_SERVICE_ACCOUNT_JSON` como nombre del secreto, solo del servidor.
 
 En el runtime de Functions configurar también `NODE_OPTIONS=--experimental-require-module` para que Firebase Admin pueda cargar su dependencia ESM bajo Node 24/Lambda. No modifica permisos ni habilita escrituras. La ejecución local real mediante Netlify Dev tiene un launcher separado y requiere autorización de IAM, credencial y escrituras: [ops/BACKEND_REAL.md](ops/BACKEND_REAL.md).
 
@@ -92,7 +92,7 @@ En Firebase Console > Authentication > Settings > Authorized domains, añadir el
 3. **Usuarios configurados:** conservar las siete cuentas oficiales. JPAREDES tiene ámbito exclusivamente Inventario. Las correcciones de ROCOVARRUBIAS y FCUADROS ya se ejecutaron; no repetirlas ni duplicar cuentas. RCOVARRUBIAS no fue encontrado y no debe crearse ni incorporarse. Estado: [USUARIOS_ACTIVACION.md](USUARIOS_ACTIVACION.md).
 4. **CP configurado:** el contador ya existe. No ejecutar nuevamente su creación ni modificar HE. El comando de mantenimiento permanece como herramienta protegida para otros casos expresamente autorizados.
 5. **Reglas definitivas publicadas:** `firestore.rules` conserva perfil propio para login, limita jefes por área —incluido el calendario— y niega toda escritura de cliente, incluso admin. Las escrituras pasan por Admin SDK y vuelven a comprobar permisos. El backend comprueba área actual del trabajador y área original del registro; no autoriza implícitamente una solicitud de otra área tras un traslado. No se modificaron índices y no debe desplegarse un listado vacío para borrar índices existentes.
-6. **Activar:** con autorización, configurar backend true, WORKFLOW_WRITE_MODE=pilot y listas de UID, y el indicador público financiero true; recompilar/publicar. Validar IAM, latencia, rechazo de autoaprobación, áreas, consecutivos y saldo mediante operaciones reales expresamente acordadas. Esas operaciones avanzan contadores y permanecen en auditoría. Tras aceptación, autorizar enabled y publicar de nuevo. No habilitar escrituras antes de copia, permisos y reglas correctas.
+6. **Activar:** únicamente después de sustituir y revocar la clave expuesta, con autorización, configurar backend true, `WORKFLOW_WRITE_MODE=enabled` y el indicador público financiero true; recompilar/publicar. No configurar listas UID: cada solicitud verifica Authentication y el perfil activo/rol/área en Firestore. Validar mediante operaciones reales solo si se autorizan: esas operaciones avanzan contadores y quedan en auditoría. No habilitar escrituras antes de credenciales, permisos y reglas correctas.
 
 La publicación de reglas autorizada se limita a:
 
